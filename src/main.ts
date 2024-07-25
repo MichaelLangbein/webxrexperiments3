@@ -1,172 +1,118 @@
-import {
-    BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, PointLight, RingGeometry, Scene,
-    WebGLRenderer
-} from "three";
-import { ARButton } from "three/examples/jsm/Addons.js";
+import { PerspectiveCamera, Scene, WebGLRenderer } from "three";
 
 
-/**
- * https://threejs.org/manual/#en/webxr-look-to-select
- * https://github.com/mrdoob/three.js/blob/master/examples/webxr_ar_hittest.html#L120
- *
- * Threejs:
- *  - camera per default looks into negative z direction
- *  - assuming camara starts off being held out horizontally:
- *  - z: out of the screen, x: right, y: up
- *
- * WebXR:
- *
- * Lingo:
- *  - user agent: the browser (in most normal cases)
- *  - viewer: the device in front of the user's eyes
- *  - inline: on page, before having clicked on `start AR` button
- *
- * Classes:
- *  - Session
- *  - ReferenceSpace:
- *      - headset and controllers have their own, different coordinate spaces
- *      - the controller's position must be mapped to the headset's space
- *      - `ReferenceSpaces` are spaces that allow being related to other spaces
- *      - different types:
- *          - local: 0/0/0 is at user's head when the app starts
- *          - bounded-floor: user not expected to leave a certain area
- *          - local-floor: like local, but 0/0/0 is at floor level at the user's feet
- *          - unbounded: users can walk as far as they wish
- *          - viewer: 0/0/0 *stays* at the user's head
- *      - obtaining:
- *          - overall world-space: XRSession.requestReferenceSpace()
- *  - XRViewerPose:
- *      - contains the matrix/es representing the users head
- *      - there may be multiple matrices (called `views`) associated with a viewer-pose (eg. when the device has one camera per eye)
- *  - Layer:
- *    - webgl-layer (usually set to be the base-layer)
- *    - webpgu-layer
- */
+async function checkSupport() {
+  const isArSessionSupported =
+    navigator.xr && navigator.xr.isSessionSupported && navigator.xr.isSessionSupported('immersive-ar');
+  return isArSessionSupported;
+}
 
-const container = document.getElementById('app') as HTMLDivElement;
-const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-canvas.width = canvas.clientWidth;
-canvas.height = canvas.clientHeight;
-
-const renderer = new WebGLRenderer({
-  alpha: true,
-  antialias: true,
-  canvas: canvas,
-});
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.xr.enabled = true;
-
-const arb = ARButton.createButton(renderer, {
-  // type: https://immersive-web.github.io/webxr/#feature-dependencies
-  requiredFeatures: ['hit-test'],
-});
-
-container.appendChild(arb);
-
-const scene = new Scene();
-
-const camera = new PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
-camera.position.set(0, 1.6, 0);
-
-const cube = new Mesh(
-  new BoxGeometry(0.2, 0.2, 0.2, 2, 2, 2),
-  new MeshBasicMaterial({
-    color: 'green',
-  })
-);
-cube.position.set(0, 1.6, -2);
-scene.add(cube);
-
-const reticle = new Mesh(new RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial());
-// we will calculate position and rotation manually on every frame
-reticle.matrixAutoUpdate = false;
-reticle.visible = false; // only made visible when hitting wall or floor
-scene.add(reticle);
-
-const light = new PointLight('white', 1);
-scene.add(light);
-
-const controller = renderer.xr.getController(0);
-controller.addEventListener('select', (evt) => {
-  console.log(evt);
-});
-
-class XrMgmt {
-  public getHitTestSource() {
-    if (this.hitTestSource) return this.hitTestSource;
-    else {
-      this.watchHitTestSource();
-      return undefined;
-    }
-  }
-
+class App {
+  private xrSession: XRSession | undefined;
+  private localRefSpace: XRReferenceSpace | XRBoundedReferenceSpace | undefined;
+  private viewerRefSpace: XRReferenceSpace | XRBoundedReferenceSpace | undefined;
   private hitTestSource: XRHitTestSource | undefined;
-  private requestOngoing = false;
+  private gl: WebGL2RenderingContext | undefined;
+  private renderer: WebGLRenderer | undefined;
+  private scene: Scene | undefined;
+  private camera: PerspectiveCamera | undefined;
 
-  private async watchHitTestSource() {
-    if (this.requestOngoing) return;
-    console.log('getting hittestsource');
-    this.requestOngoing = true;
+  constructor(private canvas: HTMLCanvasElement) {}
 
-    // session: lasts from click on "start ar" until click on "stop ar"
-    const session = renderer.xr.getSession();
-    if (!session || !session.requestHitTestSource) {
-      this.requestOngoing = false;
-      return;
+  public async activateXr() {
+    this.xrSession = await navigator.xr?.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'],
+      //domOverlay: {root: document.body}
+    });
+    if (!this.xrSession) throw Error(`no XRSession created`);
+
+    this.gl = this.initXrCanvas(this.canvas, this.xrSession);
+
+    this.setupThreeJs(this.canvas);
+
+    // scene-root ref-space: 0/0/0 is where user's head was at start of application
+    this.localRefSpace = await this.xrSession.requestReferenceSpace('local');
+    // viewer ref-space: 0/0/0 is at user's head all the time
+    this.viewerRefSpace = await this.xrSession.requestReferenceSpace('viewer');
+    // do hit tests by casting ray from viewer ref-space; later convert to scene-root ref-space.
+    this.hitTestSource = await this.xrSession.requestHitTestSource!({ space: this.viewerRefSpace });
+
+    this.xrSession.requestAnimationFrame(this.onLoop);
+    this.xrSession.addEventListener('select', this.onSelect);
+  }
+
+  private initXrCanvas(canvas: HTMLCanvasElement, session: XRSession) {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+    const gl = canvas.getContext('webgl2', { xrCompatible: true })!;
+    session.updateRenderState({
+      baseLayer: new XRWebGLLayer(session, gl),
+    });
+    return gl;
+  }
+
+  private setupThreeJs(canvas: HTMLCanvasElement) {
+    this.renderer = new WebGLRenderer({
+      alpha: true,
+      preserveDrawingBuffer: true,
+      canvas,
+      context: this.gl,
+    });
+    this.renderer.autoClear = false;
+
+    this.scene = new Scene();
+    this.camera = new PerspectiveCamera();
+    this.camera.matrixAutoUpdate = false;
+  }
+
+  private onSelect(session: XRSession, evt: XRInputSourceEvent): void {
+    console.log('select: ', evt);
+  }
+
+  private onLoop(time: DOMHighResTimeStamp, frame: XRFrame) {
+    // Getting framebuffer from Xr, activating it in WebGL, connecting it to Threejs
+    const framebuffer = this.xrSession!.renderState.baseLayer!.framebuffer;
+    this.gl!.bindFramebuffer(this.gl!.FRAMEBUFFER, framebuffer);
+    this.renderer!.setFramebuffer(framebuffer);
+
+    // sync pose with scene
+    const pose = frame.getViewerPose(this.localRefSpace!);
+    if (pose) {
+      // in mobile AR, we only have one view
+      const view = pose.views[0];
+
+      // update canvas size
+      const viewport = this.xrSession!.renderState.baseLayer!.getViewport(view);
+      if (viewport) this.renderer!.setSize(viewport.width, viewport.height);
+
+      // update camera
+      this.camera!.matrix.fromArray(view.transform.matrix);
+      this.camera!.projectionMatrix.fromArray(view.projectionMatrix);
+      this.camera!.updateMatrixWorld(true);
+
+      // hit test
+      // getting hit-test (from viewer ref-space)
+      const hitTestResults = frame.getHitTestResults(this.hitTestSource!);
+      if (hitTestResults.length) {
+        const hit = hitTestResults[0];
+        // relating hit-test to local ref-space
+        const hitPose = hit.getPose(this.localRefSpace!);
+
+        // update reticle
+        if (hitPose) {
+          this.reticle.visible = true;
+          this.reticle.position.set(
+            hitPose.transform.position.x,
+            hitPose.transform.position.y,
+            hitPose.transform.position.z
+          );
+          this.retcle.updateMatrixWorld(true);
+        }
+      }
     }
 
-    // viewerRefSpace: 0/0/0 is at user's head all the time
-    const viewerRefSpace = await session.requestReferenceSpace('viewer');
-    console.log({ viewerRefSpace });
-    this.hitTestSource = await session.requestHitTestSource({ space: viewerRefSpace });
-    this.requestOngoing = false;
+    this.renderer.render(this.scene, this.camera);
 
-    if (this.hitTestSource) {
-      console.log('got hittestsource');
-      session.addEventListener('end', () => {
-        this.requestOngoing = false;
-        this.hitTestSource = undefined;
-        console.log('lost session');
-      });
-    }
+    this.xrSession?.requestAnimationFrame(this.onLoop);
   }
 }
-
-function placeReticle(hitTestSource: XRHitTestSource, frame: XRFrame) {
-  const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-  if (hitTestResults.length) {
-    const hit = hitTestResults[0];
-    reticle.visible = true;
-
-    // localRefSpace: 0/0/0 is at user's head when the app starts
-    const localReferenceSpace = renderer.xr.getReferenceSpace();
-    if (!localReferenceSpace) return;
-    console.log({ rootRefSpace: localReferenceSpace });
-    const pose = hit.getPose(localReferenceSpace!);
-    if (!pose) return;
-    reticle.matrix.fromArray(pose!.transform.matrix);
-  } else {
-    reticle.visible = false;
-  }
-}
-
-const webXrMgmt = new XrMgmt();
-
-/**
- * 1. viewerRefSpace -> hitTestSource        <-- get hit-test from user's current head
- * 2. frame + hitTestSource -> hit
- * 3. localRefSpace + hit -> pose            <-- calculate pose relative to model-space, which has origin where user's head *was* at *start* of app
- * 4. reticle.matrix = pose.matrix
- *
- */
-
-async function loop(time: DOMHighResTimeStamp, frame: XRFrame) {
-  const hitTestSource = webXrMgmt.getHitTestSource();
-  if (hitTestSource) placeReticle(hitTestSource, frame);
-
-  cube.rotateY(0.01);
-  renderer.render(scene, camera);
-}
-
-renderer.setAnimationLoop(loop);
