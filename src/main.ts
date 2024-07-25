@@ -38,7 +38,9 @@ import { ARButton } from "three/examples/jsm/Addons.js";
  *  - XRViewerPose:
  *      - contains the matrix/es representing the users head
  *      - there may be multiple matrices (called `views`) associated with a viewer-pose (eg. when the device has one camera per eye)
- *
+ *  - Layer:
+ *    - webgl-layer (usually set to be the base-layer)
+ *    - webpgu-layer
  */
 
 const container = document.getElementById('app') as HTMLDivElement;
@@ -89,25 +91,79 @@ controller.addEventListener('select', (evt) => {
   console.log(evt);
 });
 
-let hitTestSourceRequested = false;
+class XrMgmt {
+  public getHitTestSource() {
+    if (this.hitTestSource) return this.hitTestSource;
+    else {
+      this.watchHitTestSource();
+      return undefined;
+    }
+  }
+
+  private hitTestSource: XRHitTestSource | undefined;
+  private requestOngoing = false;
+
+  private async watchHitTestSource() {
+    if (this.requestOngoing) return;
+    console.log('getting hittestsource');
+    this.requestOngoing = true;
+
+    // session: lasts from click on "start ar" until click on "stop ar"
+    const session = renderer.xr.getSession();
+    if (!session || !session.requestHitTestSource) {
+      this.requestOngoing = false;
+      return;
+    }
+
+    // viewerRefSpace: 0/0/0 is at user's head all the time
+    const viewerRefSpace = await session.requestReferenceSpace('viewer');
+    console.log({ viewerRefSpace });
+    this.hitTestSource = await session.requestHitTestSource({ space: viewerRefSpace });
+    this.requestOngoing = false;
+
+    if (this.hitTestSource) {
+      console.log('got hittestsource');
+      session.addEventListener('end', () => {
+        this.requestOngoing = false;
+        this.hitTestSource = undefined;
+        console.log('lost session');
+      });
+    }
+  }
+}
+
+function placeReticle(hitTestSource: XRHitTestSource, frame: XRFrame) {
+  const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+  if (hitTestResults.length) {
+    const hit = hitTestResults[0];
+    reticle.visible = true;
+
+    // localRefSpace: 0/0/0 is at user's head when the app starts
+    const localReferenceSpace = renderer.xr.getReferenceSpace();
+    if (!localReferenceSpace) return;
+    console.log({ rootRefSpace: localReferenceSpace });
+    const pose = hit.getPose(localReferenceSpace!);
+    if (!pose) return;
+    reticle.matrix.fromArray(pose!.transform.matrix);
+  } else {
+    reticle.visible = false;
+  }
+}
+
+const webXrMgmt = new XrMgmt();
+
+/**
+ * 1. viewerRefSpace -> hitTestSource        <-- get hit-test from user's current head
+ * 2. frame + hitTestSource -> hit
+ * 3. localRefSpace + hit -> pose            <-- calculate pose relative to model-space, which has origin where user's head *was* at *start* of app
+ * 4. reticle.matrix = pose.matrix
+ *
+ */
+
 async function loop(time: DOMHighResTimeStamp, frame: XRFrame) {
-  let hitTestSource: XRHitTestSource | undefined;
-
-  const referenceSpace = renderer.xr.getReferenceSpace();
-  const session = renderer.xr.getSession();
-
-  if (session && session.requestHitTestSource && hitTestSourceRequested === false) {
-    const viewerReferenceSpace = await session.requestReferenceSpace('viewer');
-    hitTestSource = (await session.requestHitTestSource({ space: viewerReferenceSpace })) as XRHitTestSource;
-    session.addEventListener('end', () => {
-      hitTestSourceRequested = false;
-      hitTestSource = undefined;
-    });
-  }
-
-  if (hitTestSource) {
-    //   const hitTestResults = frame.
-  }
+  const hitTestSource = webXrMgmt.getHitTestSource();
+  if (hitTestSource) placeReticle(hitTestSource, frame);
 
   cube.rotateY(0.01);
   renderer.render(scene, camera);
