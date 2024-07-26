@@ -1,5 +1,5 @@
 import {
-    BoxGeometry, Mesh, MeshBasicMaterial, RingGeometry, Scene, WebGLRenderer, WebXRManager
+    Group, Mesh, MeshBasicMaterial, RingGeometry, Scene, SphereGeometry, WebGLRenderer, WebXRManager
 } from "three";
 import { ARButton } from "three/examples/jsm/Addons.js";
 
@@ -24,9 +24,25 @@ const button = ARButton.createButton(renderer, {
 app.appendChild(button);
 
 const scene = new Scene();
-const cube = new Mesh(new BoxGeometry(0.2, 0.2, 0.2, 2, 2, 2), new MeshBasicMaterial());
-cube.position.set(0, 0, -2);
-scene.add(cube);
+
+const solarSystem = new Group();
+solarSystem.position.set(0, 0, -2);
+scene.add(solarSystem);
+
+const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow' }));
+solarSystem.add(sun);
+
+const earthOrbit = new Group();
+solarSystem.add(earthOrbit);
+const earth = new Mesh(new SphereGeometry(0.2, 32, 32), new MeshBasicMaterial({ color: 'blue' }));
+earth.position.set(2, 0, 0);
+earthOrbit.add(earth);
+
+const lunarOrbit = new Group();
+earth.add(lunarOrbit);
+const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshBasicMaterial({ color: 'gray' }));
+moon.position.set(0.5, 0, 0);
+lunarOrbit.add(moon);
 
 const reticle = new Mesh(new RingGeometry(0.1, 0.2, 32).rotateX(-Math.PI / 2), new MeshBasicMaterial());
 reticle.visible = false;
@@ -89,11 +105,13 @@ function placeReticle(reticle: Mesh, hts: XRHitTestSource, frame: XRFrame, xr: W
 const htsMgmt = new HtsMgmt(renderer.xr);
 
 button.addEventListener('click', () => {
-  renderer.setAnimationLoop((time, frame) => {
+  renderer.setAnimationLoop((_, frame) => {
     const hts = htsMgmt.getHts();
     if (hts) placeReticle(reticle, hts, frame, renderer.xr);
 
-    cube.rotateY(0.01);
+    earthOrbit.rotateY(0.02);
+    lunarOrbit.rotateY(0.02);
+
     renderer.render(scene, renderer.xr.getCamera());
   });
 });

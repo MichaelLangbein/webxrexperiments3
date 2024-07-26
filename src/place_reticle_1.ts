@@ -164,7 +164,7 @@ const webXrMgmt = new XrMgmt();
  *
  */
 
-async function loop(time: DOMHighResTimeStamp, frame: XRFrame) {
+async function loop(_: DOMHighResTimeStamp, frame: XRFrame) {
   const hitTestSource = webXrMgmt.getHitTestSource();
   if (hitTestSource) placeReticle(hitTestSource, frame);
 
