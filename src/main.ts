@@ -102,6 +102,15 @@ function placeReticle(reticle: Mesh, hts: XRHitTestSource, frame: XRFrame, xr: W
   }
 }
 
+async function occlude(frame: XRFrame, session: XRSession) {
+  const rootRefSpace = await session.requestReferenceSpace('local');
+  const pose = frame.getViewerPose(rootRefSpace);
+  if (!pose) return;
+  const view = pose.views[0];
+  const depthInformation = frame.getDepthInformation(view);
+  if (!depthInformation) return;
+}
+
 const htsMgmt = new HtsMgmt(renderer.xr);
 
 button.addEventListener('click', () => {

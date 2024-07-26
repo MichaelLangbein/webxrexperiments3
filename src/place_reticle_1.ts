@@ -44,6 +44,21 @@ import { ARButton } from "three/examples/jsm/Addons.js";
  *    - webgl-layer (usually set to be the base-layer)
  *    - webpgu-layer
  *    - composite-layer
+ *
+ *
+ *
+ * Concepts:
+ *  - depth:
+ *    - expensive: lidar
+ *    - phones usually estimate depth by changing focal-length and measuring where image is sharpest
+ *      not as good as lidar, but ok and cheap
+ *  - occlusion: https://www.youtube.com/watch?v=ywtNVL-nkAw
+ *    - problem: real world is rendered to screen first, then threejs world
+ *    - solution: custom shader: take depth-map from real world, compare with threejs-depth map, make all threejs transparent where real world is closer.
+ *    - caveats:
+ *      - requires camera to be in motion a bit and occluding objects to be mostly static.
+ *      - doesn't seem to work well in landscape mode?
+ *    - alternative solution: use shadow-object and make it non-transparent
  */
 
 const container = document.getElementById('app') as HTMLDivElement;
