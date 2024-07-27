@@ -52,7 +52,6 @@ export type Action = AppInit | AppExit | SessionStart | SessionStop | Play | Pau
 export interface State {
   vrActive: boolean;
   running: boolean;
-  planets: Planet[];
   selectionFraction?: number;
   gazedPlanet?: Planet;
   selectedPlanet?: Planet;

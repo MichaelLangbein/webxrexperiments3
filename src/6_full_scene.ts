@@ -130,7 +130,7 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
   container.appendChild(button);
 
   const stateMgmt = new StateMgmt({
-    planets: ['sun', 'earth'],
+    vrActive: false,
     running: true,
     gazedPlanet: undefined,
     selectedPlanet: undefined,
