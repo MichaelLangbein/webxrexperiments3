@@ -9,17 +9,69 @@
       #app {
         width: 100%;
         height: 100vh;
+        position: relative;
       }
       .canvas {
         width: 100%;
         height: 100%;
+      }
+      .hidden {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 100%;
+        pointer-events: none;
+        z-index: -998;
+      }
+      .earthInfo {
+        background-color: white;
+        border: 1px solid grey;
+        padding: 1rem;
+        width: 400px;
+        height: 300px;
+      }
+      .overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 100%;
+        pointer-events: none;
+        z-index: 998;
+        visibility: hidden;
+      }
+      .card {
+        position: absolute;
+        bottom: 3rem;
+        width: 25%;
+        left: 35%;
+        padding: 1rem;
+        border-radius: .5rem;
+        border: 1px solid gray;
+        background-color: white;
       }
     </style>
   </head>
   <body>
     <div id="app">
       <canvas id="canvas" class="canvas"></canvas>
+      
+      <div class="overlay" id="overlay">
+        <div class="card">
+          This is a card
+        </div>
+      </div>
+
+      <div class="hidden">
+        <div class="earthInfo" id="earthInfo">
+          <h2>Earth</h2>
+          <p>
+              Earth is the third planet from the Sun and the only astronomical object known to harbor life. This is enabled by Earth being an ocean world, the only one in the Solar System sustaining liquid surface water. Almost all of Earth's water is contained in its global ocean, covering 70.8% of Earth's crust. The remaining 29.2% of Earth's crust is land, most of which is located in the form of continental landmasses within Earth's land hemisphere.
+          </p>
+        </div>
+      </div>
     </div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/4_html.ts"></script>
   </body>
 </html>
