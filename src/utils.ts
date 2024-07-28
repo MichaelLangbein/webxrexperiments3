@@ -40,7 +40,11 @@ export class PickHelper {
         const intersectedObjects = this.raycaster.intersectObjects(scene.children);
         if (intersectedObjects.length) {
             // pick the first object. It's the closest one
-            this.pickedObject = intersectedObjects[0].object;
+            // make sure you're not accidentally selecting a HtmlMesh or similar
+            const intersectedPlanets = intersectedObjects
+                .filter((o) => objectIsMesh(o.object))
+                .filter((o) => o.object.userData['name']);
+            if (intersectedPlanets.length) this.pickedObject = intersectedPlanets[0].object;
         }
 
         let selected = false;
@@ -96,11 +100,28 @@ export class SpinningCursor {
         return this.cursor;
     }
 
-    update(time: number) {
+    private currentId?: string = undefined;
+    private animationStartTime = 0;
+    update(time: number, id: string) {
+        let timePassed = 0;
+        if (id !== this.currentId) {
+            this.animationStartTime = time;
+            this.currentId = id;
+        } else {
+            timePassed = time - this.animationStartTime;
+        }
+        if (timePassed > this.selectDuration) this.currentId = undefined;
+
         const fromStart = 0;
         const fromEnd = this.selectDuration;
         const toStart = -0.5;
         const toEnd = 0.5;
-        this.texture.offset.x = MathUtils.mapLinear(time % this.selectDuration, fromStart, fromEnd, toStart, toEnd);
+        this.texture.offset.x = MathUtils.mapLinear(
+            timePassed % this.selectDuration,
+            fromStart,
+            fromEnd,
+            toStart,
+            toEnd
+        );
     }
 }

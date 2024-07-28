@@ -49,7 +49,7 @@ interface Pause extends IAction {
 
 interface Gazing extends IAction {
     type: 'Gazing';
-    payload: { planet: Planet; fraction: number };
+    payload: { planet?: Planet; fraction?: number };
 }
 
 interface Selection extends IAction {
@@ -108,6 +108,11 @@ export class StateMgmt {
                 };
             case 'Gazing':
                 if (action.payload.planet === state.selectedPlanet) return state;
+                if (!action.payload.planet || !action.payload.fraction)
+                    return {
+                        ...state,
+                        gazedPlanet: undefined,
+                    };
                 if (action.payload.fraction < 1.0) {
                     return {
                         ...state,

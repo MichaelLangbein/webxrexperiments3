@@ -1,4 +1,16 @@
-import { Group, Mesh, MeshBasicMaterial, Scene, SphereGeometry, Vector2, WebGLRenderer } from 'three';
+import {
+    Group,
+    Mesh,
+    MeshBasicMaterial,
+    PointLight,
+    Scene,
+    SphereGeometry,
+    Texture,
+    TextureLoader,
+    Vector2,
+    Vector3,
+    WebGLRenderer,
+} from 'three';
 import { ARButton, HTMLMesh } from 'three/examples/jsm/Addons.js';
 
 import { StateMgmt } from './state_mgmt';
@@ -77,7 +89,7 @@ import { SpinningCursor, PickHelper } from './utils';
  *              - requires you to get some dom from the window, you can't create new dom on the fly.
  *              - doesn't display back-side per default
  *              - doesn't work in browser-AR-emulator
- *              - html2canvas doesn't automatically do line-breaks, set width of div manually in html
+ *              - html2canvas doesn't automatically do line-breaks: https://discourse.threejs.org/t/htmlmesh-incorrect-text-line-break/49227
  *      - as a separate layer: use layer-api
  *
  * - Layer:
@@ -105,7 +117,14 @@ import { SpinningCursor, PickHelper } from './utils';
  *
  */
 
-async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overlay: HTMLDivElement) {
+async function main(
+    container: HTMLDivElement,
+    canvas: HTMLCanvasElement,
+    overlay: HTMLDivElement,
+    sunTex: Texture,
+    moonTex: Texture,
+    earthTex: Texture
+) {
     /****************************************************************************************************
      * root elements
      ****************************************************************************************************/
@@ -137,7 +156,9 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
         selectedPlanet: undefined,
     });
 
-    const picker = new PickHelper(2000);
+    const pickingDuration = 750;
+
+    const picker = new PickHelper(pickingDuration);
 
     /****************************************************************************************************
      * solar system
@@ -149,46 +170,50 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
     solarSystem.position.set(0, 0, -4);
     scene.add(solarSystem);
 
-    const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow' }));
+    const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow', map: sunTex }));
     sun.userData['name'] = 'sun';
     solarSystem.add(sun);
+    const sunLight = new PointLight('white', 1000);
+    sun.add(sunLight);
 
     const earthOrbit = new Group();
     solarSystem.add(earthOrbit);
-    const earth = new Mesh(new SphereGeometry(0.2, 32, 32), new MeshBasicMaterial({ color: 'blue' }));
+    const earth = new Mesh(new SphereGeometry(0.2, 32, 32), new MeshBasicMaterial({ map: earthTex }));
     earth.userData['name'] = 'earth';
     earth.position.set(2, 0, 0);
     earthOrbit.add(earth);
 
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
-    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshBasicMaterial({ color: 'gray' }));
+    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshBasicMaterial({ color: 'gray', map: moonTex }));
     moon.userData['name'] = 'moon';
     moon.position.set(0.5, 0, 0);
     lunarOrbit.add(moon);
 
-    function getPlanetInfoMesh(planet: Mesh) {
+    function getPlanetInfoMesh(planet: Mesh, orbit: Group, offset?: Vector3) {
         const name = planet.userData['name'];
         const dom = document.getElementById(`${name}Info`) as HTMLDivElement;
         const infoBox = new HTMLMesh(dom);
-        infoBox.position.set(0.4, 0.4, 0);
+        if (!offset) offset = new Vector3(1, 1, 0);
+        infoBox.position.set(planet.position.x + offset.x, planet.position.y + offset.y, planet.position.z + offset.z);
         infoBox.scale.setScalar(3);
-        planet.add(infoBox);
+        orbit.add(infoBox);
         return infoBox;
     }
 
     const planetData: {
         [name: string]: {
             mesh: Mesh;
+            orbit: Group;
             info: HTMLMesh;
         };
     } = {
-        sun: { mesh: sun, info: getPlanetInfoMesh(sun) },
-        moon: { mesh: moon, info: getPlanetInfoMesh(moon) },
-        earth: { mesh: earth, info: getPlanetInfoMesh(earth) },
+        sun: { mesh: sun, orbit: solarSystem, info: getPlanetInfoMesh(sun, solarSystem) },
+        moon: { mesh: moon, orbit: lunarOrbit, info: getPlanetInfoMesh(moon, earthOrbit, new Vector3(0, 1, 0)) },
+        earth: { mesh: earth, orbit: earthOrbit, info: getPlanetInfoMesh(earth, earthOrbit) },
     };
 
-    const cursor = new SpinningCursor(1, 2000);
+    const cursor = new SpinningCursor(1, pickingDuration);
 
     /****************************************************************************************************
      * loop
@@ -204,12 +229,11 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
             // state-input
 
             const { object, fraction } = picker.pick(new Vector2(0, 0), scene, camera, time);
-            if (object)
-                stateMgmt.handleAction({ type: 'Gazing', payload: { planet: object?.userData['name'], fraction } });
+            if (object && object.userData['name'])
+                stateMgmt.handleAction({ type: 'Gazing', payload: { planet: object.userData['name'], fraction } });
+            else stateMgmt.handleAction({ type: 'Gazing', payload: { planet: undefined, fraction: undefined } });
 
             // state-output
-
-            console.log(state.gazedPlanet, state.selectedPlanet);
 
             if (state.gazedPlanet) {
                 const { mesh, info: _ } = planetData[state.gazedPlanet];
@@ -218,7 +242,7 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
                 if (meshRadius) cursorMesh.scale.setScalar(1.2 * meshRadius);
                 cursorMesh.visible = true;
                 mesh.add(cursorMesh);
-                cursor.update(time);
+                cursor.update(time, state.gazedPlanet);
                 cursorMesh.lookAt(camera.position);
             } else {
                 cursor.getMesh().visible = false;
@@ -234,8 +258,10 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
             }
 
             if (state.running) {
+                earth.rotateY(0.1);
+                moon.rotateY(0.01);
                 earthOrbit.rotateY(0.01);
-                lunarOrbit.rotateY(0.04);
+                lunarOrbit.rotateY(0.02);
             }
 
             renderer.render(scene, camera);
@@ -277,13 +303,22 @@ async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overla
 /****************************************************************************************************
  * Entrypoint, catching possible errors
  ****************************************************************************************************/
-try {
-    const container = document.getElementById('app') as HTMLDivElement;
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    const overlay = document.getElementById('overlay') as HTMLDivElement;
-    main(container, canvas, overlay);
-} catch (error) {
-    console.error(error);
-    const overlay = document.getElementById('overlay') as HTMLDivElement;
-    overlay.innerHTML = JSON.stringify(error);
+async function run() {
+    try {
+        const container = document.getElementById('app') as HTMLDivElement;
+        const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+        const overlay = document.getElementById('overlay') as HTMLDivElement;
+
+        const tl = new TextureLoader();
+        const sunTexture = await tl.loadAsync('./2k_sun.jpg');
+        const moonTexture = await tl.loadAsync('./2k_moon.jpg');
+        const earthTexture = await tl.loadAsync('./2k_earth_daymap.jpg');
+
+        main(container, canvas, overlay, sunTexture, moonTexture, earthTexture);
+    } catch (error) {
+        console.error(error);
+        const overlay = document.getElementById('overlay') as HTMLDivElement;
+        overlay.innerHTML = JSON.stringify(error);
+    }
 }
+run();

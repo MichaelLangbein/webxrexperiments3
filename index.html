@@ -11,9 +11,10 @@
       }
       #app {
         width: 100%;
-        height: 100vh;
+        height: 100dvh;
         position: relative;
         background-color: black;
+        overflow: hidden;
       }
       .canvas {
         width: 100%;
@@ -29,6 +30,7 @@
         pointer-events: none;
         z-index: -998;
         visibility: hidden;
+        overflow: hidden;
       }
 
       .info {
@@ -36,6 +38,7 @@
         top: 0;
         background-color: white;
         border: 1px solid grey;
+        border-radius: 0.5rem;
         padding: 1rem;
         width: 400px;
         height: 300px;
@@ -103,22 +106,45 @@
         <div class="info" id="earthInfo">
           <h2>Earth</h2>
           <p>
-            Earth is the third planet from the Sun and the only astronomical object known to harbor life. This is
-            enabled by Earth being an ocean world, the only one in the Solar System sustaining liquid surface water.
-            Almost all of Earth's water is contained in its global ocean, covering 70.8% of Earth's crust. The remaining
-            29.2% of Earth's crust is land, most of which is located in the form of continental landmasses within
-            Earth's land hemisphere.
+            Earth is the third planet from the Sun  <br/>
+            and the only astronomical object known to harbor life. <br/>
+            This is enabled by Earth being an ocean world,  <br/>
+            the only one in the Solar System sustaining liquid  <br/>
+            surface water. Almost all of Earth's water is contained  <br/>
+            in its global ocean,covering 70.8% of Earth's crust.  <br/>
+            The remaining 29.2% of Earth's crust is land,  <br/>
+            most of which is located in the form of continental  <br/>
+            landmasses within Earth's land hemisphere.
           </p>
         </div>
 
         <div class="info" id="moonInfo">
           <h2>Moon</h2>
-          <p>The Moon is Earth's only natural satellite. It orbits at an average distance of 384,400 km (238,900 mi), about 30 times the diameter of Earth. Tidal forces between Earth and the Moon have over time synchronized the Moon's orbital period (lunar month) with its rotation period (lunar day) at 29.5 Earth days, causing the same side of the Moon to always face Earth. The Moon's gravitational pull – and to a lesser extent, the Sun's – are the main drivers of Earth's tides. </p>
+          <p>
+            The Moon is Earth's only natural satellite. <br/>
+            It orbits at an average distance of  <br/>
+            384,400 km (238,900 mi), about 30 times <br/>
+            the diameter of Earth. Tidal forces between  <br/>
+            Earth and the Moon have over time synchronized  <br/>
+            the Moon's orbital period (lunar month) with  <br/>
+            its rotation period (lunar day) at 29.5 Earth  <br/>
+            days, causing the same side of the Moon to always <br/>
+            face Earth.
+          </p>
         </div>
 
         <div class="info" id="sunInfo">
           <h2>Sun</h2>
-          <p>The Sun is the star at the center of the Solar System. It is a massive, nearly perfect sphere of hot plasma, heated to incandescence by nuclear fusion reactions in its core, radiating the energy from its surface mainly as visible light and infrared radiation with 10% at ultraviolet energies. It is by far the most important source of energy for life on Earth. The Sun has been an object of veneration in many cultures. It has been a central subject for astronomical research since antiquity. </p>
+          <p>
+            The Sun is the star at the center of the Solar System. <br/>
+            It is a massive, nearly perfect sphere of hot plasma, <br/>
+            heated to incandescence by nuclear fusion reactions <br/>
+            in its core, radiating the energy from its surface  <br/>
+            mainly as visible light and infrared radiation with  <br/>
+            10% at ultraviolet energies. It is by far the most  <br/>
+            important source of energy for life on Earth. 
+            
+          </p>
         </div>
 
       </div>
