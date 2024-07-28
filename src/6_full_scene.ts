@@ -1,7 +1,10 @@
 import {
+    AdditiveBlending,
     Group,
     Mesh,
     MeshBasicMaterial,
+    MeshLambertMaterial,
+    MeshPhongMaterial,
     PointLight,
     Scene,
     SphereGeometry,
@@ -123,7 +126,11 @@ async function main(
     overlay: HTMLDivElement,
     sunTex: Texture,
     moonTex: Texture,
-    earthTex: Texture
+    earthTex: Texture,
+    earthSpecularTex: Texture,
+    earthNormalTex: Texture,
+    earthCloudTex: Texture,
+    earthNightTex: Texture
 ) {
     /****************************************************************************************************
      * root elements
@@ -173,19 +180,37 @@ async function main(
     const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow', map: sunTex }));
     sun.userData['name'] = 'sun';
     solarSystem.add(sun);
-    const sunLight = new PointLight('white', 1000);
+    const sunLight = new PointLight('white', 10);
     sun.add(sunLight);
 
     const earthOrbit = new Group();
     solarSystem.add(earthOrbit);
-    const earth = new Mesh(new SphereGeometry(0.2, 32, 32), new MeshBasicMaterial({ map: earthTex }));
+    const earth = new Mesh(
+        new SphereGeometry(0.2, 32, 32),
+        new MeshPhongMaterial({ map: earthTex, specularMap: earthSpecularTex, normalMap: earthNormalTex, bumpScale: 2 })
+    );
     earth.userData['name'] = 'earth';
     earth.position.set(2, 0, 0);
     earthOrbit.add(earth);
 
+    const lights = new Mesh(
+        new SphereGeometry(0.2, 32, 32),
+        new MeshBasicMaterial({
+            map: earthNightTex,
+            blending: AdditiveBlending,
+        })
+    );
+    earth.add(lights);
+
+    const clouds = new Mesh(
+        new SphereGeometry(0.205, 32, 32),
+        new MeshLambertMaterial({ transparent: true, map: earthCloudTex })
+    );
+    earth.add(clouds);
+
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
-    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshBasicMaterial({ color: 'gray', map: moonTex }));
+    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshPhongMaterial({ color: 'gray', map: moonTex }));
     moon.userData['name'] = 'moon';
     moon.position.set(0.5, 0, 0);
     lunarOrbit.add(moon);
@@ -258,7 +283,9 @@ async function main(
             }
 
             if (state.running) {
+                sun.rotateY(-0.005);
                 earth.rotateY(0.1);
+                clouds.rotateY(-0.01);
                 moon.rotateY(0.01);
                 earthOrbit.rotateY(0.01);
                 lunarOrbit.rotateY(0.02);
@@ -313,12 +340,28 @@ async function run() {
         const sunTexture = await tl.loadAsync('./2k_sun.jpg');
         const moonTexture = await tl.loadAsync('./2k_moon.jpg');
         const earthTexture = await tl.loadAsync('./2k_earth_daymap.jpg');
+        const earthSpecularTex = await tl.loadAsync('./2k_earth_specular_map.jpg');
+        const earthNormalTex = await tl.loadAsync('./2k_earth_normal_map.jpg');
+        const earthCloudTex = await tl.loadAsync('./2k_earth_clouds.png');
+        const earthNightTex = await tl.loadAsync('./2k_earth_nightmap.jpg');
 
-        main(container, canvas, overlay, sunTexture, moonTexture, earthTexture);
+        main(
+            container,
+            canvas,
+            overlay,
+            sunTexture,
+            moonTexture,
+            earthTexture,
+            earthSpecularTex,
+            earthNormalTex,
+            earthCloudTex,
+            earthNightTex
+        );
     } catch (error) {
         console.error(error);
         const overlay = document.getElementById('overlay') as HTMLDivElement;
         overlay.innerHTML = JSON.stringify(error);
+        overlay.style.setProperty('visibility', 'visible');
     }
 }
 run();
