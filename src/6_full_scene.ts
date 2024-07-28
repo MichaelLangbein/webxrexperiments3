@@ -1,10 +1,12 @@
 import {
     AdditiveBlending,
+    CircleGeometry,
     Group,
     Mesh,
     MeshBasicMaterial,
     MeshLambertMaterial,
     MeshPhongMaterial,
+    PCFSoftShadowMap,
     PointLight,
     Scene,
     SphereGeometry,
@@ -18,6 +20,7 @@ import { ARButton, HTMLMesh } from 'three/examples/jsm/Addons.js';
 
 import { StateMgmt } from './state_mgmt';
 import { SpinningCursor, PickHelper } from './utils';
+import { runAllToDict } from './async';
 
 /**
  * https://threejs.org/manual/#en/webxr-look-to-select
@@ -130,20 +133,23 @@ async function main(
     earthSpecularTex: Texture,
     earthNormalTex: Texture,
     earthCloudTex: Texture,
-    earthNightTex: Texture
+    earthNightTex: Texture,
+    sunCoronaTex: Texture
 ) {
     /****************************************************************************************************
      * root elements
      ****************************************************************************************************/
+
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
 
     const renderer = new WebGLRenderer({
         alpha: true,
         canvas,
         failIfMajorPerformanceCaveat: true,
     });
-
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = PCFSoftShadowMap; // default THREE.PCFShadowMap
 
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.xr.enabled = true;
@@ -181,7 +187,25 @@ async function main(
     sun.userData['name'] = 'sun';
     solarSystem.add(sun);
     const sunLight = new PointLight('white', 10);
+    sunLight.castShadow = true;
+    //Set up shadow properties for the light
+    sunLight.shadow.mapSize.width = 512; // default
+    sunLight.shadow.mapSize.height = 512; // default
+    sunLight.shadow.camera.near = 0.5; // default
+    sunLight.shadow.camera.far = 500; // default
     sun.add(sunLight);
+
+    const sunBloomGeometry = new CircleGeometry(0.6, 32);
+    const sunBloom = new Mesh(
+        sunBloomGeometry,
+        new MeshBasicMaterial({ transparent: true, map: sunCoronaTex, opacity: 0.125 })
+    );
+    const sunBloom2 = new Mesh(
+        sunBloomGeometry,
+        new MeshBasicMaterial({ transparent: true, map: sunCoronaTex, opacity: 0.07 })
+    );
+    solarSystem.add(sunBloom);
+    solarSystem.add(sunBloom2);
 
     const earthOrbit = new Group();
     solarSystem.add(earthOrbit);
@@ -191,6 +215,8 @@ async function main(
     );
     earth.userData['name'] = 'earth';
     earth.position.set(2, 0, 0);
+    earth.castShadow = true;
+    earth.receiveShadow = true;
     earthOrbit.add(earth);
 
     const lights = new Mesh(
@@ -206,11 +232,14 @@ async function main(
         new SphereGeometry(0.205, 32, 32),
         new MeshLambertMaterial({ transparent: true, map: earthCloudTex })
     );
+    clouds.receiveShadow = true;
     earth.add(clouds);
 
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
     const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshPhongMaterial({ color: 'gray', map: moonTex }));
+    moon.castShadow = true;
+    moon.receiveShadow = true;
     moon.userData['name'] = 'moon';
     moon.position.set(0.5, 0, 0);
     lunarOrbit.add(moon);
@@ -289,6 +318,10 @@ async function main(
                 moon.rotateY(0.01);
                 earthOrbit.rotateY(0.01);
                 lunarOrbit.rotateY(0.02);
+                sunBloom.lookAt(camera.position);
+                sunBloom.rotateZ(time / 10_000);
+                sunBloom2.lookAt(camera.position);
+                sunBloom2.rotateZ(-time / 10_000);
             }
 
             renderer.render(scene, camera);
@@ -337,13 +370,27 @@ async function run() {
         const overlay = document.getElementById('overlay') as HTMLDivElement;
 
         const tl = new TextureLoader();
-        const sunTexture = await tl.loadAsync('./2k_sun.jpg');
-        const moonTexture = await tl.loadAsync('./2k_moon.jpg');
-        const earthTexture = await tl.loadAsync('./2k_earth_daymap.jpg');
-        const earthSpecularTex = await tl.loadAsync('./2k_earth_specular_map.jpg');
-        const earthNormalTex = await tl.loadAsync('./2k_earth_normal_map.jpg');
-        const earthCloudTex = await tl.loadAsync('./2k_earth_clouds.png');
-        const earthNightTex = await tl.loadAsync('./2k_earth_nightmap.jpg');
+        const [
+            sunTexture,
+            moonTexture,
+            earthTexture,
+            earthSpecularTex,
+            earthNormalTex,
+            earthCloudTex,
+            earthNightTex,
+            sunCoronaTex,
+        ] = await Promise.all([
+            tl.loadAsync('./2k_sun.jpg'),
+            tl.loadAsync('./2k_moon.jpg'),
+            tl.loadAsync('./2k_earth_daymap.jpg'),
+            tl.loadAsync('./2k_earth_specular_map.jpg'),
+            tl.loadAsync('./2k_earth_normal_map.jpg'),
+            tl.loadAsync('./2k_earth_clouds.png'),
+            tl.loadAsync('./2k_earth_nightmap.jpg'),
+            tl.loadAsync('./sun_corona.png'),
+        ]);
+
+        console.log(sunTexture, moonTexture);
 
         main(
             container,
@@ -355,7 +402,8 @@ async function run() {
             earthSpecularTex,
             earthNormalTex,
             earthCloudTex,
-            earthNightTex
+            earthNightTex,
+            sunCoronaTex
         );
     } catch (error) {
         console.error(error);
