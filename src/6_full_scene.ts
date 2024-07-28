@@ -20,7 +20,6 @@ import { ARButton, HTMLMesh } from 'three/examples/jsm/Addons.js';
 
 import { StateMgmt } from './state_mgmt';
 import { SpinningCursor, PickHelper } from './utils';
-import { runAllToDict } from './async';
 
 /**
  * https://threejs.org/manual/#en/webxr-look-to-select
