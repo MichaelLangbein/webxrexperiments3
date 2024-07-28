@@ -1,7 +1,8 @@
-import { Group, Mesh, MeshBasicMaterial, Scene, SphereGeometry, WebGLRenderer } from 'three';
+import { Group, Mesh, MeshBasicMaterial, Scene, SphereGeometry, Vector2, WebGLRenderer } from 'three';
 import { ARButton, HTMLMesh } from 'three/examples/jsm/Addons.js';
 
 import { StateMgmt } from './state_mgmt';
+import { SpinningCursor, PickHelper } from './utils';
 
 /**
  * https://threejs.org/manual/#en/webxr-look-to-select
@@ -105,137 +106,184 @@ import { StateMgmt } from './state_mgmt';
  */
 
 async function main(container: HTMLDivElement, canvas: HTMLCanvasElement, overlay: HTMLDivElement) {
-  /****************************************************************************************************
-   * root elements
-   ****************************************************************************************************/
+    /****************************************************************************************************
+     * root elements
+     ****************************************************************************************************/
 
-  const renderer = new WebGLRenderer({
-    alpha: true,
-    canvas,
-    failIfMajorPerformanceCaveat: true,
-  });
-
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.xr.enabled = true;
-
-  const button = ARButton.createButton(renderer, {
-    requiredFeatures: ['hit-test', 'dom-overlay'],
-    domOverlay: {
-      root: overlay,
-    },
-  });
-  container.appendChild(button);
-
-  const stateMgmt = new StateMgmt({
-    vrActive: false,
-    running: true,
-    gazedPlanet: undefined,
-    selectedPlanet: undefined,
-    selectionFraction: undefined,
-  });
-
-  /****************************************************************************************************
-   * solar system
-   ****************************************************************************************************/
-
-  const scene = new Scene();
-
-  const solarSystem = new Group();
-  solarSystem.position.set(0, 0, -4);
-  scene.add(solarSystem);
-
-  const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow' }));
-  sun.userData['name'] = 'sun';
-  solarSystem.add(sun);
-
-  const earthOrbit = new Group();
-  solarSystem.add(earthOrbit);
-  const earth = new Mesh(new SphereGeometry(0.2, 32, 32), new MeshBasicMaterial({ color: 'blue' }));
-  earth.userData['name'] = 'earth';
-  earth.position.set(2, 0, 0);
-  earthOrbit.add(earth);
-
-  const lunarOrbit = new Group();
-  earth.add(lunarOrbit);
-  const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshBasicMaterial({ color: 'gray' }));
-  moon.position.set(0.5, 0, 0);
-  lunarOrbit.add(moon);
-
-  const dom = document.getElementById('earthInfo') as HTMLDivElement;
-  const infoBox = new HTMLMesh(dom);
-  earth.add(infoBox);
-  infoBox.position.set(0.4, 0.4, 0);
-  infoBox.scale.setScalar(3);
-
-  /****************************************************************************************************
-   * loop
-   ****************************************************************************************************/
-  button.addEventListener('click', () => {
-    stateMgmt.handleAction({ type: 'app init', payload: {} });
-
-    renderer.setAnimationLoop((_, frame) => {
-      const camera = renderer.xr.getCamera();
-
-      const state = stateMgmt.getCurrentState();
-
-      if (state.selectedPlanet) {
-        infoBox.visible = true;
-        infoBox.lookAt(camera.position);
-      } else {
-        infoBox.visible = false;
-      }
-
-      if (state.running) {
-        earthOrbit.rotateY(0.01);
-        lunarOrbit.rotateY(0.04);
-      }
-
-      renderer.render(scene, camera);
+    const renderer = new WebGLRenderer({
+        alpha: true,
+        canvas,
+        failIfMajorPerformanceCaveat: true,
     });
-  });
 
-  stateMgmt.listen((state) => {
-    if (state.vrActive) overlay.style.setProperty('visibility', 'visible');
-    else overlay.style.setProperty('visibility', 'hidden');
-  });
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
 
-  /****************************************************************************************************
-   * hud
-   ****************************************************************************************************/
-  const exitButton = document.getElementById('exit') as HTMLButtonElement;
-  const pauseButton = document.getElementById('stop') as HTMLButtonElement;
-  const selection = document.getElementById('select') as HTMLSelectElement;
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.xr.enabled = true;
 
-  exitButton.addEventListener('click', (evt) => stateMgmt.handleAction({ type: 'app exit', payload: {} }));
-  pauseButton.addEventListener('click', (evt) => {
-    if (pauseButton.innerHTML.includes('□')) stateMgmt.handleAction({ type: 'pause', payload: {} });
-    else stateMgmt.handleAction({ type: 'play', payload: {} });
-  });
-  selection.addEventListener('change', (evt: any) =>
-    stateMgmt.handleAction({ type: 'selection', payload: { planet: evt.target.value } })
-  );
+    const button = ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test', 'dom-overlay'],
+        domOverlay: {
+            root: overlay,
+        },
+    });
+    container.appendChild(button);
 
-  stateMgmt.listen((state) => {
-    if (state.running) pauseButton.innerHTML = '□';
-    else pauseButton.innerHTML = '▷';
-    if (state.selectedPlanet) selection.value = state.selectedPlanet;
-    else selection.value = '';
-  });
+    const stateMgmt = new StateMgmt({
+        vrActive: false,
+        running: true,
+        gazedPlanet: undefined,
+        selectedPlanet: undefined,
+    });
+
+    const picker = new PickHelper(2000);
+
+    /****************************************************************************************************
+     * solar system
+     ****************************************************************************************************/
+
+    const scene = new Scene();
+
+    const solarSystem = new Group();
+    solarSystem.position.set(0, 0, -4);
+    scene.add(solarSystem);
+
+    const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow' }));
+    sun.userData['name'] = 'sun';
+    solarSystem.add(sun);
+
+    const earthOrbit = new Group();
+    solarSystem.add(earthOrbit);
+    const earth = new Mesh(new SphereGeometry(0.2, 32, 32), new MeshBasicMaterial({ color: 'blue' }));
+    earth.userData['name'] = 'earth';
+    earth.position.set(2, 0, 0);
+    earthOrbit.add(earth);
+
+    const lunarOrbit = new Group();
+    earth.add(lunarOrbit);
+    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshBasicMaterial({ color: 'gray' }));
+    moon.userData['name'] = 'moon';
+    moon.position.set(0.5, 0, 0);
+    lunarOrbit.add(moon);
+
+    function getPlanetInfoMesh(planet: Mesh) {
+        const name = planet.userData['name'];
+        const dom = document.getElementById(`${name}Info`) as HTMLDivElement;
+        const infoBox = new HTMLMesh(dom);
+        infoBox.position.set(0.4, 0.4, 0);
+        infoBox.scale.setScalar(3);
+        planet.add(infoBox);
+        return infoBox;
+    }
+
+    const planetData: {
+        [name: string]: {
+            mesh: Mesh;
+            info: HTMLMesh;
+        };
+    } = {
+        sun: { mesh: sun, info: getPlanetInfoMesh(sun) },
+        moon: { mesh: moon, info: getPlanetInfoMesh(moon) },
+        earth: { mesh: earth, info: getPlanetInfoMesh(earth) },
+    };
+
+    const cursor = new SpinningCursor(1, 2000);
+
+    /****************************************************************************************************
+     * loop
+     ****************************************************************************************************/
+    button.addEventListener('click', () => {
+        stateMgmt.handleAction({ type: 'app init', payload: {} });
+
+        renderer.setAnimationLoop((time, _) => {
+            const state = stateMgmt.getCurrentState();
+            if (!state.vrActive) return;
+            const camera = renderer.xr.getCamera();
+
+            // state-input
+
+            const { object, fraction } = picker.pick(new Vector2(0, 0), scene, camera, time);
+            if (object)
+                stateMgmt.handleAction({ type: 'Gazing', payload: { planet: object?.userData['name'], fraction } });
+
+            // state-output
+
+            console.log(state.gazedPlanet, state.selectedPlanet);
+
+            if (state.gazedPlanet) {
+                const { mesh, info: _ } = planetData[state.gazedPlanet];
+                const cursorMesh = cursor.getMesh();
+                const meshRadius = mesh.geometry?.boundingSphere?.radius;
+                if (meshRadius) cursorMesh.scale.setScalar(1.2 * meshRadius);
+                cursorMesh.visible = true;
+                mesh.add(cursorMesh);
+                cursor.update(time);
+                cursorMesh.lookAt(camera.position);
+            } else {
+                cursor.getMesh().visible = false;
+            }
+
+            for (const [name, { mesh: _, info }] of Object.entries(planetData)) {
+                if (name === state.selectedPlanet) {
+                    info.visible = true;
+                    info.lookAt(camera.position);
+                } else {
+                    info.visible = false;
+                }
+            }
+
+            if (state.running) {
+                earthOrbit.rotateY(0.01);
+                lunarOrbit.rotateY(0.04);
+            }
+
+            renderer.render(scene, camera);
+        });
+    });
+
+    stateMgmt.listen((state) => {
+        if (state.vrActive) overlay.style.setProperty('visibility', 'visible');
+        else overlay.style.setProperty('visibility', 'hidden');
+    });
+
+    /****************************************************************************************************
+     * hud
+     ****************************************************************************************************/
+    const exitButton = document.getElementById('exit') as HTMLButtonElement;
+    const pauseButton = document.getElementById('stop') as HTMLButtonElement;
+    const selection = document.getElementById('planets') as HTMLSelectElement;
+
+    exitButton.addEventListener('click', (_) => stateMgmt.handleAction({ type: 'app exit', payload: {} }));
+    pauseButton.addEventListener('click', (_) => {
+        if (pauseButton.innerHTML.includes('□')) stateMgmt.handleAction({ type: 'pause', payload: {} });
+        else stateMgmt.handleAction({ type: 'play', payload: {} });
+    });
+    selection.addEventListener('change', (evt: any) =>
+        stateMgmt.handleAction({ type: 'selection', payload: { planet: evt.target.value } })
+    );
+
+    stateMgmt.listen((state) => {
+        if (state.running) pauseButton.innerHTML = '□';
+        else pauseButton.innerHTML = '▷';
+        if (state.selectedPlanet) selection.value = state.selectedPlanet;
+        else selection.value = 'none';
+        if (!state.vrActive) {
+            renderer.xr.getSession()?.end();
+        }
+    });
 }
 
 /****************************************************************************************************
  * Entrypoint, catching possible errors
  ****************************************************************************************************/
 try {
-  const container = document.getElementById('app') as HTMLDivElement;
-  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  const overlay = document.getElementById('overlay') as HTMLDivElement;
-  main(container, canvas, overlay);
+    const container = document.getElementById('app') as HTMLDivElement;
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+    const overlay = document.getElementById('overlay') as HTMLDivElement;
+    main(container, canvas, overlay);
 } catch (error) {
-  console.error(error);
-  const overlay = document.getElementById('overlay') as HTMLDivElement;
-  overlay.innerHTML = JSON.stringify(error);
+    console.error(error);
+    const overlay = document.getElementById('overlay') as HTMLDivElement;
+    overlay.innerHTML = JSON.stringify(error);
 }

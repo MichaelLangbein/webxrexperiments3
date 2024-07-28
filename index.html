@@ -6,10 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vite + TS</title>
     <style>
+      body {
+        margin: 0;padding: 0;
+      }
       #app {
         width: 100%;
         height: 100vh;
         position: relative;
+        background-color: black;
       }
       .canvas {
         width: 100%;
@@ -27,7 +31,9 @@
         visibility: hidden;
       }
 
-      .earthInfo {
+      .info {
+        position: absolute;
+        top: 0;
         background-color: white;
         border: 1px solid grey;
         padding: 1rem;
@@ -44,6 +50,14 @@
         pointer-events: none;
         z-index: 99999;
         visibility: hidden;
+      }
+      .cross {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: white;
       }
       .hud {
         position: absolute;
@@ -68,6 +82,8 @@
       <canvas id="canvas" class="canvas"></canvas>
 
       <div class="overlay" id="overlay">
+        <div class="cross">+</div>
+
         <div class="hud">
           <button class="hudIcon exit" id="exit">✖</button>
           <button class="hudIcon stop" id="stop">□</button>
@@ -77,13 +93,14 @@
               <option value="none"></option>
               <option value="sun">Sun</option>
               <option value="earth">Earth</option>
+              <option value="moon">Moon</option>
             </select>
           </div>
         </div>
       </div>
 
       <div class="hidden">
-        <div class="earthInfo" id="earthInfo">
+        <div class="info" id="earthInfo">
           <h2>Earth</h2>
           <p>
             Earth is the third planet from the Sun and the only astronomical object known to harbor life. This is
@@ -93,6 +110,17 @@
             Earth's land hemisphere.
           </p>
         </div>
+
+        <div class="info" id="moonInfo">
+          <h2>Moon</h2>
+          <p>The Moon is Earth's only natural satellite. It orbits at an average distance of 384,400 km (238,900 mi), about 30 times the diameter of Earth. Tidal forces between Earth and the Moon have over time synchronized the Moon's orbital period (lunar month) with its rotation period (lunar day) at 29.5 Earth days, causing the same side of the Moon to always face Earth. The Moon's gravitational pull – and to a lesser extent, the Sun's – are the main drivers of Earth's tides. </p>
+        </div>
+
+        <div class="info" id="sunInfo">
+          <h2>Sun</h2>
+          <p>The Sun is the star at the center of the Solar System. It is a massive, nearly perfect sphere of hot plasma, heated to incandescence by nuclear fusion reactions in its core, radiating the energy from its surface mainly as visible light and infrared radiation with 10% at ultraviolet energies. It is by far the most important source of energy for life on Earth. The Sun has been an object of veneration in many cultures. It has been a central subject for astronomical research since antiquity. </p>
+        </div>
+
       </div>
     </div>
     <script type="module" src="/src/6_full_scene.ts"></script>
