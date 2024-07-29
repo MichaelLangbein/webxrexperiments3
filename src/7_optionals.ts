@@ -15,12 +15,12 @@ import {
     Vector2,
     Vector3,
     WebGLRenderer,
-} from 'three';
-import { ARButton, HTMLMesh } from 'three/examples/jsm/Addons.js';
+} from "three";
+import { ARButton, HTMLMesh } from "three/examples/jsm/Addons.js";
 
-import { StateMgmt } from './state_mgmt';
-import { SpinningCursor, PickHelper } from './utils';
-import { RawCameraMgmt } from './webxr';
+import { StateMgmt } from "./state_mgmt";
+import { SpinningCursor, PickHelper } from "./utils";
+import { RawCameraMgmt } from "./webxr";
 
 /**
  * https://threejs.org/manual/#en/webxr-look-to-select
@@ -155,8 +155,8 @@ async function main(
     renderer.xr.enabled = true;
 
     const button = ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test', 'dom-overlay'],
-        optionalFeatures: ['depth-sensing', 'camera-access'],
+        requiredFeatures: ["hit-test", "dom-overlay"],
+        optionalFeatures: ["depth-sensing", "camera-access"],
         domOverlay: {
             root: overlay,
         },
@@ -184,10 +184,13 @@ async function main(
     solarSystem.position.set(0, 0, -4);
     scene.add(solarSystem);
 
-    const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: 'yellow', map: sunTex }));
-    sun.userData['name'] = 'sun';
+    const sun = new Mesh(
+        new SphereGeometry(0.5, 32, 32),
+        new MeshBasicMaterial({ color: "yellow", map: sunTex })
+    );
+    sun.userData["name"] = "sun";
     solarSystem.add(sun);
-    const sunLight = new PointLight('white', 10);
+    const sunLight = new PointLight("white", 10);
     sunLight.castShadow = true;
     //Set up shadow properties for the light
     sunLight.shadow.mapSize.width = 512; // default
@@ -199,11 +202,19 @@ async function main(
     const sunBloomGeometry = new CircleGeometry(0.6, 32);
     const sunBloom = new Mesh(
         sunBloomGeometry,
-        new MeshBasicMaterial({ transparent: true, map: sunCoronaTex, opacity: 0.125 })
+        new MeshBasicMaterial({
+            transparent: true,
+            map: sunCoronaTex,
+            opacity: 0.125,
+        })
     );
     const sunBloom2 = new Mesh(
         sunBloomGeometry,
-        new MeshBasicMaterial({ transparent: true, map: sunCoronaTex, opacity: 0.07 })
+        new MeshBasicMaterial({
+            transparent: true,
+            map: sunCoronaTex,
+            opacity: 0.07,
+        })
     );
     solarSystem.add(sunBloom);
     solarSystem.add(sunBloom2);
@@ -212,9 +223,14 @@ async function main(
     solarSystem.add(earthOrbit);
     const earth = new Mesh(
         new SphereGeometry(0.2, 32, 32),
-        new MeshPhongMaterial({ map: earthTex, specularMap: earthSpecularTex, normalMap: earthNormalTex, bumpScale: 2 })
+        new MeshPhongMaterial({
+            map: earthTex,
+            specularMap: earthSpecularTex,
+            normalMap: earthNormalTex,
+            bumpScale: 2,
+        })
     );
-    earth.userData['name'] = 'earth';
+    earth.userData["name"] = "earth";
     earth.position.set(2, 0, 0);
     earth.castShadow = true;
     earth.receiveShadow = true;
@@ -238,19 +254,26 @@ async function main(
 
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
-    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshPhongMaterial({ color: 'gray', map: moonTex }));
+    const moon = new Mesh(
+        new SphereGeometry(0.1, 32, 32),
+        new MeshPhongMaterial({ color: "gray", map: moonTex })
+    );
     moon.castShadow = true;
     moon.receiveShadow = true;
-    moon.userData['name'] = 'moon';
+    moon.userData["name"] = "moon";
     moon.position.set(0.5, 0, 0);
     lunarOrbit.add(moon);
 
     function getPlanetInfoMesh(planet: Mesh, orbit: Group, offset?: Vector3) {
-        const name = planet.userData['name'];
+        const name = planet.userData["name"];
         const dom = document.getElementById(`${name}Info`) as HTMLDivElement;
         const infoBox = new HTMLMesh(dom);
         if (!offset) offset = new Vector3(1, 1, 0);
-        infoBox.position.set(planet.position.x + offset.x, planet.position.y + offset.y, planet.position.z + offset.z);
+        infoBox.position.set(
+            planet.position.x + offset.x,
+            planet.position.y + offset.y,
+            planet.position.z + offset.z
+        );
         infoBox.scale.setScalar(3);
         orbit.add(infoBox);
         return infoBox;
@@ -263,9 +286,21 @@ async function main(
             info: HTMLMesh;
         };
     } = {
-        sun: { mesh: sun, orbit: solarSystem, info: getPlanetInfoMesh(sun, solarSystem) },
-        moon: { mesh: moon, orbit: lunarOrbit, info: getPlanetInfoMesh(moon, earthOrbit, new Vector3(0, 1, 0)) },
-        earth: { mesh: earth, orbit: earthOrbit, info: getPlanetInfoMesh(earth, earthOrbit) },
+        sun: {
+            mesh: sun,
+            orbit: solarSystem,
+            info: getPlanetInfoMesh(sun, solarSystem),
+        },
+        moon: {
+            mesh: moon,
+            orbit: lunarOrbit,
+            info: getPlanetInfoMesh(moon, earthOrbit, new Vector3(0, 1, 0)),
+        },
+        earth: {
+            mesh: earth,
+            orbit: earthOrbit,
+            info: getPlanetInfoMesh(earth, earthOrbit),
+        },
     };
 
     const cursor = new SpinningCursor(1, pickingDuration);
@@ -274,14 +309,14 @@ async function main(
     /****************************************************************************************************
      * loop
      ****************************************************************************************************/
-    button.addEventListener('click', () => {
-        stateMgmt.handleAction({ type: 'app init', payload: {} });
+    button.addEventListener("click", () => {
+        stateMgmt.handleAction({ type: "app init", payload: {} });
 
         setTimeout(() => {
             const session = renderer.xr.getSession();
             if (session) {
                 console.log(session.enabledFeatures);
-                dn.innerHTML = session.enabledFeatures?.join(' ') || '';
+                dn.innerHTML = session.enabledFeatures?.join(" ") || "";
             }
         }, 1000);
 
@@ -291,14 +326,34 @@ async function main(
             const camera = renderer.xr.getCamera();
 
             const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
-            dn.innerHTML = JSON.stringify(rawTextures);
+            if (rawTextures.length) {
+                const { texture, height, width } = rawTextures[0];
+                rawCameraMgmt.drawWebGlTextureToCanvas(
+                    texture,
+                    width,
+                    height,
+                    dc
+                );
+            }
 
             // state-input
 
-            const { object, fraction } = picker.pick(new Vector2(0, 0), scene, camera, time);
-            if (object && object.userData['name'])
-                stateMgmt.handleAction({ type: 'Gazing', payload: { planet: object.userData['name'], fraction } });
-            else stateMgmt.handleAction({ type: 'Gazing', payload: { planet: undefined, fraction: undefined } });
+            const { object, fraction } = picker.pick(
+                new Vector2(0, 0),
+                scene,
+                camera,
+                time
+            );
+            if (object && object.userData["name"])
+                stateMgmt.handleAction({
+                    type: "Gazing",
+                    payload: { planet: object.userData["name"], fraction },
+                });
+            else
+                stateMgmt.handleAction({
+                    type: "Gazing",
+                    payload: { planet: undefined, fraction: undefined },
+                });
 
             // state-output
 
@@ -315,7 +370,9 @@ async function main(
                 cursor.getMesh().visible = false;
             }
 
-            for (const [name, { mesh: _, info }] of Object.entries(planetData)) {
+            for (const [name, { mesh: _, info }] of Object.entries(
+                planetData
+            )) {
                 if (name === state.selectedPlanet) {
                     info.visible = true;
                     info.lookAt(camera.position);
@@ -342,31 +399,37 @@ async function main(
     });
 
     stateMgmt.listen((state) => {
-        if (state.vrActive) overlay.style.setProperty('visibility', 'visible');
-        else overlay.style.setProperty('visibility', 'hidden');
+        if (state.vrActive) overlay.style.setProperty("visibility", "visible");
+        else overlay.style.setProperty("visibility", "hidden");
     });
 
     /****************************************************************************************************
      * hud
      ****************************************************************************************************/
-    const exitButton = document.getElementById('exit') as HTMLButtonElement;
-    const pauseButton = document.getElementById('stop') as HTMLButtonElement;
-    const selection = document.getElementById('planets') as HTMLSelectElement;
+    const exitButton = document.getElementById("exit") as HTMLButtonElement;
+    const pauseButton = document.getElementById("stop") as HTMLButtonElement;
+    const selection = document.getElementById("planets") as HTMLSelectElement;
 
-    exitButton.addEventListener('click', (_) => stateMgmt.handleAction({ type: 'app exit', payload: {} }));
-    pauseButton.addEventListener('click', (_) => {
-        if (pauseButton.innerHTML.includes('□')) stateMgmt.handleAction({ type: 'pause', payload: {} });
-        else stateMgmt.handleAction({ type: 'play', payload: {} });
+    exitButton.addEventListener("click", (_) =>
+        stateMgmt.handleAction({ type: "app exit", payload: {} })
+    );
+    pauseButton.addEventListener("click", (_) => {
+        if (pauseButton.innerHTML.includes("□"))
+            stateMgmt.handleAction({ type: "pause", payload: {} });
+        else stateMgmt.handleAction({ type: "play", payload: {} });
     });
-    selection.addEventListener('change', (evt: any) =>
-        stateMgmt.handleAction({ type: 'selection', payload: { planet: evt.target.value } })
+    selection.addEventListener("change", (evt: any) =>
+        stateMgmt.handleAction({
+            type: "selection",
+            payload: { planet: evt.target.value },
+        })
     );
 
     stateMgmt.listen((state) => {
-        if (state.running) pauseButton.innerHTML = '□';
-        else pauseButton.innerHTML = '▷';
+        if (state.running) pauseButton.innerHTML = "□";
+        else pauseButton.innerHTML = "▷";
         if (state.selectedPlanet) selection.value = state.selectedPlanet;
-        else selection.value = 'none';
+        else selection.value = "none";
         if (!state.vrActive) {
             renderer.xr.getSession()?.end();
         }
@@ -377,13 +440,14 @@ async function main(
  * Entrypoint, catching possible errors
  ****************************************************************************************************/
 
-const dn = document.getElementById('debugNotes') as HTMLDivElement;
+const dn = document.getElementById("debugNotes") as HTMLDivElement;
+const dc = document.getElementById("debugCanvas") as HTMLCanvasElement;
 
 async function run() {
     try {
-        const container = document.getElementById('app') as HTMLDivElement;
-        const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-        const overlay = document.getElementById('overlay') as HTMLDivElement;
+        const container = document.getElementById("app") as HTMLDivElement;
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        const overlay = document.getElementById("overlay") as HTMLDivElement;
 
         const tl = new TextureLoader();
         const [
@@ -396,14 +460,14 @@ async function run() {
             earthNightTex,
             sunCoronaTex,
         ] = await Promise.all([
-            tl.loadAsync('./2k_sun.jpg'),
-            tl.loadAsync('./2k_moon.jpg'),
-            tl.loadAsync('./2k_earth_daymap.jpg'),
-            tl.loadAsync('./2k_earth_specular_map.jpg'),
-            tl.loadAsync('./2k_earth_normal_map.jpg'),
-            tl.loadAsync('./2k_earth_clouds.png'),
-            tl.loadAsync('./2k_earth_nightmap.jpg'),
-            tl.loadAsync('./sun_corona.png'),
+            tl.loadAsync("./2k_sun.jpg"),
+            tl.loadAsync("./2k_moon.jpg"),
+            tl.loadAsync("./2k_earth_daymap.jpg"),
+            tl.loadAsync("./2k_earth_specular_map.jpg"),
+            tl.loadAsync("./2k_earth_normal_map.jpg"),
+            tl.loadAsync("./2k_earth_clouds.png"),
+            tl.loadAsync("./2k_earth_nightmap.jpg"),
+            tl.loadAsync("./sun_corona.png"),
         ]);
 
         main(
