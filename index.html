@@ -78,6 +78,14 @@
         padding: 1rem;
         margin: 0.5rem;
       }
+
+      .debugNotes {
+        position: absolute;
+        pointer-events: none;
+        bottom: 0;
+        width: 100%;
+        background-color: white;
+      }
     </style>
   </head>
   <body>
@@ -99,6 +107,10 @@
               <option value="moon">Moon</option>
             </select>
           </div>
+        </div>
+
+        <div class="debugNotes" id="debugNotes">
+          debug text
         </div>
       </div>
 
@@ -149,6 +161,6 @@
 
       </div>
     </div>
-    <script type="module" src="/src/6_full_scene.ts"></script>
+    <script type="module" src="/src/7_optionals.ts"></script>
   </body>
 </html>
