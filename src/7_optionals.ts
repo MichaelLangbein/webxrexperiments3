@@ -184,10 +184,7 @@ async function main(
     solarSystem.position.set(0, 0, -4);
     scene.add(solarSystem);
 
-    const sun = new Mesh(
-        new SphereGeometry(0.5, 32, 32),
-        new MeshBasicMaterial({ color: "yellow", map: sunTex })
-    );
+    const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: "yellow", map: sunTex }));
     sun.userData["name"] = "sun";
     solarSystem.add(sun);
     const sunLight = new PointLight("white", 10);
@@ -254,10 +251,7 @@ async function main(
 
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
-    const moon = new Mesh(
-        new SphereGeometry(0.1, 32, 32),
-        new MeshPhongMaterial({ color: "gray", map: moonTex })
-    );
+    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshPhongMaterial({ color: "gray", map: moonTex }));
     moon.castShadow = true;
     moon.receiveShadow = true;
     moon.userData["name"] = "moon";
@@ -269,11 +263,7 @@ async function main(
         const dom = document.getElementById(`${name}Info`) as HTMLDivElement;
         const infoBox = new HTMLMesh(dom);
         if (!offset) offset = new Vector3(1, 1, 0);
-        infoBox.position.set(
-            planet.position.x + offset.x,
-            planet.position.y + offset.y,
-            planet.position.z + offset.z
-        );
+        infoBox.position.set(planet.position.x + offset.x, planet.position.y + offset.y, planet.position.z + offset.z);
         infoBox.scale.setScalar(3);
         orbit.add(infoBox);
         return infoBox;
@@ -328,22 +318,12 @@ async function main(
             const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
             if (rawTextures.length) {
                 const { texture, height, width } = rawTextures[0];
-                rawCameraMgmt.drawWebGlTextureToCanvas(
-                    texture,
-                    width,
-                    height,
-                    dc
-                );
+                rawCameraMgmt.drawWebGlTextureIntoCorner(texture, width, height);
             }
 
             // state-input
 
-            const { object, fraction } = picker.pick(
-                new Vector2(0, 0),
-                scene,
-                camera,
-                time
-            );
+            const { object, fraction } = picker.pick(new Vector2(0, 0), scene, camera, time);
             if (object && object.userData["name"])
                 stateMgmt.handleAction({
                     type: "Gazing",
@@ -370,9 +350,7 @@ async function main(
                 cursor.getMesh().visible = false;
             }
 
-            for (const [name, { mesh: _, info }] of Object.entries(
-                planetData
-            )) {
+            for (const [name, { mesh: _, info }] of Object.entries(planetData)) {
                 if (name === state.selectedPlanet) {
                     info.visible = true;
                     info.lookAt(camera.position);
@@ -410,12 +388,9 @@ async function main(
     const pauseButton = document.getElementById("stop") as HTMLButtonElement;
     const selection = document.getElementById("planets") as HTMLSelectElement;
 
-    exitButton.addEventListener("click", (_) =>
-        stateMgmt.handleAction({ type: "app exit", payload: {} })
-    );
+    exitButton.addEventListener("click", (_) => stateMgmt.handleAction({ type: "app exit", payload: {} }));
     pauseButton.addEventListener("click", (_) => {
-        if (pauseButton.innerHTML.includes("□"))
-            stateMgmt.handleAction({ type: "pause", payload: {} });
+        if (pauseButton.innerHTML.includes("□")) stateMgmt.handleAction({ type: "pause", payload: {} });
         else stateMgmt.handleAction({ type: "play", payload: {} });
     });
     selection.addEventListener("change", (evt: any) =>
@@ -441,7 +416,6 @@ async function main(
  ****************************************************************************************************/
 
 const dn = document.getElementById("debugNotes") as HTMLDivElement;
-const dc = document.getElementById("debugCanvas") as HTMLCanvasElement;
 
 async function run() {
     try {

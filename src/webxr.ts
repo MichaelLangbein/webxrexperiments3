@@ -1,6 +1,7 @@
 import { WebGLRenderer, WebXRManager } from "three";
 import { Graph } from "../../../engine3/engine3/src/engine.more";
 import { DataTexture, Buffer, Framebuffer, GlobalState, Texture } from "../../../engine3/engine3/src/engine";
+import { webglLoggingProxy } from "../../../engine3/engine3/src/utils/debugUtils";
 
 export class HtsMgmt {
     constructor(private xr: WebXRManager) {}
@@ -98,10 +99,10 @@ export class RawCameraMgmt {
         return binding;
     }
 
-    private t2c?: Tex2CanvasDrawer;
-    private getT2C(canvas: HTMLCanvasElement) {
+    private t2c?: RawTex2Canvas;
+    private getT2C(texture: WebGLTexture, width: number, height: number) {
         if (this.t2c) return this.t2c;
-        this.t2c = new Tex2CanvasDrawer(canvas);
+        this.t2c = new RawTex2Canvas(this.renderer, texture, width, height, 8);
         return this.t2c;
     }
 
@@ -141,9 +142,9 @@ export class RawCameraMgmt {
         return textureRefs;
     }
 
-    public drawWebGlTextureToCanvas(texture: WebGLTexture, width: number, height: number, canvas: HTMLCanvasElement) {
-        const t2c = this.getT2C(canvas);
-        t2c.replaceTexture(texture, width, height);
+    public drawWebGlTextureIntoCorner(texture: WebGLTexture, width: number, height: number) {
+        const gl = this.renderer.getContext() as WebGL2RenderingContext;
+        const t2c = this.getT2C(texture, width, height);
         t2c.draw();
     }
 
@@ -178,100 +179,124 @@ export class RawCameraMgmt {
     }
 }
 
-class Tex2CanvasDrawer {
-    private graph: Graph;
-    private tex: Texture;
+class RawTex2Canvas {
+    private buffer: WebGLBuffer;
+    private program: WebGLProgram;
+    private gl: WebGL2RenderingContext;
+    vao: WebGLVertexArrayObject;
 
-    constructor(private canvas: HTMLCanvasElement) {
-        // use raw webgl to render the texture to a canvas
-        const gl = canvas.getContext("webgl2") as WebGL2RenderingContext;
+    constructor(
+        private renderer: WebGLRenderer,
+        private texture: WebGLTexture,
+        private width: number,
+        private height: number,
+        private bindPoint: number
+    ) {
+        const gl = renderer.getContext() as WebGL2RenderingContext;
+        const canvas = gl.canvas;
+        this.gl = gl;
 
-        const tex = new DataTexture(gl, { data: [], t: "ubyte4" });
+        // rectangle vertex buffer
+        const buffer0 = gl.createBuffer()!;
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer0);
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            new Float32Array([-1, 1, 0, 1, -1, -1, 0, 1, 1, -1, 0, 1, -1, 1, 0, 1, 1, -1, 0, 1, 1, 1, 0, 1]),
+            gl.STATIC_DRAW
+        );
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        this.buffer = buffer0;
 
-        const gs = new GlobalState(gl, {
-            allowAlpha: true,
-            viewport: [0, 0, canvas.width, canvas.height],
-        });
-
-        const rectVertices = [
-            [-1, +1, 0, 1], // lt
-            [-1, -1, 0, 1], // lb
-            [+1, -1, 0, 1], // rb
-            [-1, +1, 0, 1], // lt
-            [+1, -1, 0, 1], // rb
-            [+1, +1, 0, 1], // rt
-        ];
-
-        const graph = new Graph(gs, {
-            program: {
-                vertexSource: `#version 300 es
+        // program
+        const shader0 = gl.createShader(gl.VERTEX_SHADER)!;
+        gl.shaderSource(
+            shader0,
+            `#version 300 es
                     in vec4 position;
                     void main() {
                         gl_Position = vec4(position.xy, 0, 1);
-                    }`,
-                fragmentSource: `#version 300 es
+                    }`
+        );
+        gl.compileShader(shader0);
+        gl.getShaderParameter(shader0, gl.COMPILE_STATUS);
+        const shader1 = gl.createShader(gl.FRAGMENT_SHADER)!;
+        gl.shaderSource(
+            shader1,
+            `#version 300 es
                     precision highp float;
                     uniform sampler2D tex;
                     out vec4 fragColor;
                     void main() {
                         vec2 uv = vec2(
-                            gl_FragCoord.x / ${canvas.width.toFixed(1)}, 
-                            gl_FragCoord.y / ${canvas.height.toFixed(1)}
+                            gl_FragCoord.x / ${width.toFixed(1)}, 
+                            gl_FragCoord.y / ${height.toFixed(1)}
                         );
                         vec4 color = texture(tex, uv);
                         fragColor = color;
-                    }`,
-            },
-            inputs: {
-                textures: {
-                    tex,
-                },
-                attributes: {
-                    position: {
-                        buffer: new Buffer(gl, { data: new Float32Array(rectVertices.flat()), changesOften: false }),
-                        config: { normalize: false, nrInstances: 0, type: "vec4" },
-                    },
-                },
-                uniforms: {},
-            },
-            outputs: {},
-            settings: {
-                drawingMode: "triangles",
-                instanced: false,
-                nrVertices: 6,
-                viewport: [0, 0, canvas.width, canvas.height],
-            },
-        });
-
-        this.graph = graph;
-        this.tex = tex;
-    }
-
-    public replaceTexture(tex: WebGLTexture, width: number, height: number) {
-        this.tex.destroy();
-
-        const gl = this.graph.gs.gl;
-
-        // @ts-ignore  <-- is actually a protected method.
-        const textureParas = Texture.getTextureParas(gl, "ubyte4", []);
-
-        const wrappedTexture = new Texture(
-            gl,
-            "ubyte4",
-            tex,
-            0,
-            textureParas.internalFormat,
-            textureParas.format,
-            textureParas.type,
-            width,
-            height,
-            0
+                    }`
         );
-        this.graph.updateTexture("tex", wrappedTexture);
-        this.tex = wrappedTexture;
+        gl.compileShader(shader1);
+        gl.getShaderParameter(shader1, gl.COMPILE_STATUS);
+        const program0 = gl.createProgram()!;
+        gl.attachShader(program0, shader0);
+        gl.attachShader(program0, shader1);
+        gl.linkProgram(program0);
+        gl.getProgramParameter(program0, gl.LINK_STATUS);
+        gl.detachShader(program0, shader0);
+        gl.deleteShader(shader0);
+        gl.detachShader(program0, shader1);
+        gl.deleteShader(shader1);
+        this.program = program0;
+
+        // vao connecting buffer to program
+        const vertexArr0 = gl.createVertexArray()!;
+        this.vao = vertexArr0;
+
+        // connect buffer to vao
+        const attribLoc = gl.getAttribLocation(program0, `position`);
+        gl.bindVertexArray(vertexArr0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer0);
+        gl.enableVertexAttribArray(attribLoc);
+        gl.vertexAttribPointer(attribLoc, 4, gl.FLOAT, false, 16, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        // bind texture to slot
+        gl.activeTexture(gl.TEXTURE0 + bindPoint);
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        // tell program which slot to find texture in
+        gl.useProgram(program0);
+        const uniformLocation = gl.getUniformLocation(program0, "tex");
+        this.gl.uniform1i(uniformLocation, bindPoint);
     }
 
-    public draw() {
-        this.graph.draw();
+    destroy() {
+        const gl = this.gl;
+        gl.deleteVertexArray(this.vao);
+        gl.deleteTexture(this.texture);
+        gl.deleteBuffer(this.buffer);
+        gl.deleteProgram(this.program);
+    }
+
+    draw() {
+        const gl = this.gl;
+
+        // remember state
+        const vwp_orig = Array.from(gl.getParameter(gl.VIEWPORT)) as number[];
+        const prg_orig = gl.getParameter(gl.CURRENT_PROGRAM);
+        const vao_orig = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+
+        // render
+        gl.viewport(10, 10, 100, 100);
+        gl.useProgram(this.program);
+        gl.bindVertexArray(this.vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+        gl.activeTexture(gl.TEXTURE0 + this.bindPoint);
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.drawArrays(gl.TRIANGLES, gl.NONE, 6);
+
+        // restore state
+        gl.viewport(vwp_orig[0], vwp_orig[1], vwp_orig[2], vwp_orig[3]);
+        gl.useProgram(prg_orig);
+        gl.bindVertexArray(vao_orig);
     }
 }
