@@ -251,7 +251,7 @@ async function main(
 
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
-    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshPhongMaterial({ color: "gray", map: moonTex }));
+    const moon = new Mesh(new SphereGeometry(0.1, 32, 32), new MeshPhongMaterial({ map: moonTex }));
     moon.castShadow = true;
     moon.receiveShadow = true;
     moon.userData["name"] = "moon";
@@ -315,10 +315,12 @@ async function main(
             if (!state.vrActive) return;
             const camera = renderer.xr.getCamera();
 
-            const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
-            if (rawTextures.length) {
-                const { texture, height, width } = rawTextures[0];
-                rawCameraMgmt.drawWebGlTextureIntoCorner(texture, width, height);
+            if (frame) {
+                const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
+                if (rawTextures.length) {
+                    const { texture, height, width } = rawTextures[0];
+                    rawCameraMgmt.drawWebGlTextureIntoCorner(texture, width, height);
+                }
             }
 
             // state-input

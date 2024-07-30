@@ -99,10 +99,18 @@ export class RawCameraMgmt {
         return binding;
     }
 
-    private t2c?: RawTex2Canvas;
+    private t2c?: RawTex2Corner;
     private getT2C(texture: WebGLTexture, width: number, height: number) {
         if (this.t2c) return this.t2c;
-        this.t2c = new RawTex2Canvas(this.renderer, texture, width, height, 8);
+        const gl = this.renderer.getContext();
+        const nrBindPoints = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+        const freeBindPoint = nrBindPoints - 1;
+        this.t2c = new RawTex2Corner(this.renderer, texture, width, height, freeBindPoint, [
+            10,
+            height - 100,
+            200,
+            200,
+        ]);
         return this.t2c;
     }
 
@@ -145,7 +153,7 @@ export class RawCameraMgmt {
     public drawWebGlTextureIntoCorner(texture: WebGLTexture, width: number, height: number) {
         const gl = this.renderer.getContext() as WebGL2RenderingContext;
         const t2c = this.getT2C(texture, width, height);
-        t2c.draw();
+        t2c.draw(texture);
     }
 
     public getWebGlTexturePixels(texture: WebGLTexture, width: number, height: number, gl: WebGL2RenderingContext) {
@@ -179,7 +187,7 @@ export class RawCameraMgmt {
     }
 }
 
-class RawTex2Canvas {
+class RawTex2Corner {
     private buffer: WebGLBuffer;
     private program: WebGLProgram;
     private gl: WebGL2RenderingContext;
@@ -190,10 +198,10 @@ class RawTex2Canvas {
         private texture: WebGLTexture,
         private width: number,
         private height: number,
-        private bindPoint: number
+        private bindPoint: number,
+        private viewPort: number[]
     ) {
         const gl = renderer.getContext() as WebGL2RenderingContext;
-        const canvas = gl.canvas;
         this.gl = gl;
 
         // rectangle vertex buffer
@@ -277,26 +285,36 @@ class RawTex2Canvas {
         gl.deleteProgram(this.program);
     }
 
-    draw() {
+    draw(texture: WebGLTexture) {
         const gl = this.gl;
 
         // remember state
         const vwp_orig = Array.from(gl.getParameter(gl.VIEWPORT)) as number[];
         const prg_orig = gl.getParameter(gl.CURRENT_PROGRAM);
         const vao_orig = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+        const activeUnit_orig = gl.getParameter(gl.ACTIVE_TEXTURE);
 
         // render
-        gl.viewport(10, 10, 100, 100);
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(this.viewPort[0], this.viewPort[1], this.viewPort[2], this.viewPort[3]);
+
+        gl.viewport(this.viewPort[0], this.viewPort[1], this.viewPort[2], this.viewPort[3]);
         gl.useProgram(this.program);
         gl.bindVertexArray(this.vao);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
         gl.activeTexture(gl.TEXTURE0 + this.bindPoint);
-        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        const uniformLocation = gl.getUniformLocation(this.program, "tex");
+        this.gl.uniform1i(uniformLocation, this.bindPoint);
         gl.drawArrays(gl.TRIANGLES, gl.NONE, 6);
+
+        gl.disable(gl.SCISSOR_TEST);
+        // gl.scissor(this.viewPort[0] + this.viewPort[2], 0, this.width - this.viewPort[2], this.height);
 
         // restore state
         gl.viewport(vwp_orig[0], vwp_orig[1], vwp_orig[2], vwp_orig[3]);
         gl.useProgram(prg_orig);
         gl.bindVertexArray(vao_orig);
+        gl.activeTexture(activeUnit_orig);
     }
 }
