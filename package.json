@@ -15,5 +15,9 @@
   },
   "dependencies": {
     "three": "^0.166.1"
+  },
+  "peerDependencies": {
+    "@tensorflow/tfjs": "4.20.0",
+    "@tensorflow-models/depth-estimation": "0.0.4"
   }
 }

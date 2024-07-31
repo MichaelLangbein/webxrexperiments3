@@ -1,7 +1,5 @@
 import { WebGLRenderer, WebXRManager } from "three";
-import { Graph } from "../../../engine3/engine3/src/engine.more";
-import { DataTexture, Buffer, Framebuffer, GlobalState, Texture } from "../../../engine3/engine3/src/engine";
-import { webglLoggingProxy } from "../../../engine3/engine3/src/utils/debugUtils";
+import { Framebuffer, Texture } from "../../../engine3/engine3/src/engine";
 
 export class HtsMgmt {
     constructor(private xr: WebXRManager) {}
@@ -177,13 +175,10 @@ export class RawCameraMgmt {
         return pixels;
     }
 
-    public webGlTextureToTensor(texture: WebGLTexture, width: number, height: number) {
-        // https://js.tensorflow.org/api/latest/ -> grep `texture`
-    }
-
     public convertWebGlTextureToThreejsTexture(texture: WebGLTexture, width: number, height: number) {
         // https://discourse.threejs.org/t/using-a-webgltexture-as-texture-for-three-js/46245/7
         // https://stackoverflow.com/questions/55082573/use-webgl-texture-as-a-three-js-texture-map
+        throw new Error(`Method not implemented`);
     }
 }
 
@@ -191,7 +186,8 @@ class RawTex2Corner {
     private buffer: WebGLBuffer;
     private program: WebGLProgram;
     private gl: WebGL2RenderingContext;
-    vao: WebGLVertexArrayObject;
+    private vao: WebGLVertexArrayObject;
+    private uvbuffer: WebGLBuffer;
 
     constructor(
         private renderer: WebGLRenderer,
@@ -205,15 +201,43 @@ class RawTex2Corner {
         this.gl = gl;
 
         // rectangle vertex buffer
-        const buffer0 = gl.createBuffer()!;
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer0);
+        const rectangleBuffer = gl.createBuffer()!;
+        gl.bindBuffer(gl.ARRAY_BUFFER, rectangleBuffer);
         gl.bufferData(
             gl.ARRAY_BUFFER,
-            new Float32Array([-1, 1, 0, 1, -1, -1, 0, 1, 1, -1, 0, 1, -1, 1, 0, 1, 1, -1, 0, 1, 1, 1, 0, 1]),
+            new Float32Array(
+                [
+                    [1, 1, 0, 1], // tr
+                    [1, -1, 0, 1], // br
+                    [-1, 1, 0, 1], // tl,
+                    [-1, 1, 0, 1], // tl
+                    [1, -1, 0, 1], // br
+                    [-1, -1, 0, 1], // bl
+                ].flat()
+            ),
             gl.STATIC_DRAW
         );
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        this.buffer = buffer0;
+        this.buffer = rectangleBuffer;
+
+        const rectangleUvBuffer = gl.createBuffer()!;
+        gl.bindBuffer(gl.ARRAY_BUFFER, rectangleUvBuffer);
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            new Float32Array(
+                [
+                    [1, 1], // tr
+                    [1, 0], // br
+                    [0, 1], // tl,
+                    [0, 1], // tl
+                    [1, 0], // br
+                    [0, 0], // bl
+                ].flat()
+            ),
+            gl.STATIC_DRAW
+        );
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        this.uvbuffer = rectangleUvBuffer;
 
         // program
         const shader0 = gl.createShader(gl.VERTEX_SHADER)!;
@@ -221,7 +245,10 @@ class RawTex2Corner {
             shader0,
             `#version 300 es
                     in vec4 position;
+                    in vec2 uv;
+                    out vec2 v_uv;
                     void main() {
+                        v_uv = uv;
                         gl_Position = vec4(position.xy, 0, 1);
                     }`
         );
@@ -233,14 +260,17 @@ class RawTex2Corner {
             `#version 300 es
                     precision highp float;
                     uniform sampler2D tex;
+                    in vec2 v_uv;
                     out vec4 fragColor;
                     void main() {
-                        vec2 uv = vec2(
-                            gl_FragCoord.x / ${width.toFixed(1)}, 
-                            gl_FragCoord.y / ${height.toFixed(1)}
-                        );
+                        // vec2 uv = vec2(
+                        //     gl_FragCoord.x / ${(width / 5).toFixed(1)}, 
+                        //     gl_FragCoord.y / ${(2 * height).toFixed(1)}
+                        // );
+                        vec2 uv = v_uv;
                         vec4 color = texture(tex, uv);
                         fragColor = color;
+                        fragColor = vec4(uv.xy, 0, 1);
                     }`
         );
         gl.compileShader(shader1);
@@ -260,12 +290,16 @@ class RawTex2Corner {
         const vertexArr0 = gl.createVertexArray()!;
         this.vao = vertexArr0;
 
-        // connect buffer to vao
+        // connect buffers to vao
         const attribLoc = gl.getAttribLocation(program0, `position`);
         gl.bindVertexArray(vertexArr0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, rectangleBuffer);
         gl.enableVertexAttribArray(attribLoc);
         gl.vertexAttribPointer(attribLoc, 4, gl.FLOAT, false, 16, 0);
+        const attribLocUv = gl.getAttribLocation(program0, `uv`);
+        gl.bindBuffer(gl.ARRAY_BUFFER, rectangleUvBuffer);
+        gl.enableVertexAttribArray(attribLocUv);
+        gl.vertexAttribPointer(attribLocUv, 2, gl.FLOAT, false, 8, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
         // bind texture to slot
@@ -293,6 +327,8 @@ class RawTex2Corner {
         const prg_orig = gl.getParameter(gl.CURRENT_PROGRAM);
         const vao_orig = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
         const activeUnit_orig = gl.getParameter(gl.ACTIVE_TEXTURE);
+        // instead of remembering state: resetting threejs-state globally
+        // this.renderer.resetState();
 
         // render
         gl.enable(gl.SCISSOR_TEST);
@@ -301,7 +337,6 @@ class RawTex2Corner {
         gl.viewport(this.viewPort[0], this.viewPort[1], this.viewPort[2], this.viewPort[3]);
         gl.useProgram(this.program);
         gl.bindVertexArray(this.vao);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
         gl.activeTexture(gl.TEXTURE0 + this.bindPoint);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         const uniformLocation = gl.getUniformLocation(this.program, "tex");

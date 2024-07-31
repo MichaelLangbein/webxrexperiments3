@@ -108,6 +108,7 @@ import { RawCameraMgmt } from "./webxr";
  *    - composite-layer
  *      - quad-layer: place an image in the scene: much crisper than if placed in webgl-layer, but doesn't participate in depth-testing
  *    - threejs actually supports layers: https://threejs.org/examples/webxr_vr_layers.html
+ *    - but pretty new. There is a polyfill (https://github.com/immersive-web/webxr-layers-polyfill) but not working well with threejs
  *
  *
  *
@@ -122,6 +123,9 @@ import { RawCameraMgmt } from "./webxr";
  *      - installation instructions: https://developers.google.com/ar/develop/java/emulator#update-arcore
  *
  */
+
+// import WebXRLayersPolyfill from "./webxr_layers_polyfill.js";
+// let layersPolyfill = new WebXRLayersPolyfill();
 
 async function main(
     container: HTMLDivElement,
@@ -155,10 +159,15 @@ async function main(
     renderer.xr.enabled = true;
 
     const button = ARButton.createButton(renderer, {
-        requiredFeatures: ["hit-test", "dom-overlay"],
-        optionalFeatures: ["depth-sensing", "camera-access"],
+        requiredFeatures: ["hit-test", "dom-overlay", "depth-sensing"],
+        // optionalFeatures: ["camera-access"],
+        optionalFeatures: ["layers"],
         domOverlay: {
             root: overlay,
+        },
+        depthSensing: {
+            usagePreference: ["cpu-optimized"],
+            dataFormatPreference: ["luminance-alpha", "float32"],
         },
     });
     container.appendChild(button);
@@ -295,6 +304,8 @@ async function main(
 
     const cursor = new SpinningCursor(1, pickingDuration);
     const rawCameraMgmt = new RawCameraMgmt(renderer);
+    // const depthEstimator = new DepthEstimator();
+    // await depthEstimator.init();
 
     /****************************************************************************************************
      * loop
@@ -315,13 +326,22 @@ async function main(
             if (!state.vrActive) return;
             const camera = renderer.xr.getCamera();
 
-            if (frame) {
-                const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
-                if (rawTextures.length) {
-                    const { texture, height, width } = rawTextures[0];
-                    rawCameraMgmt.drawWebGlTextureIntoCorner(texture, width, height);
-                }
-            }
+            // if (frame) {
+            //     const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
+            //     if (rawTextures.length) {
+            //         // const { texture, height, width } = rawTextures[0];
+            //         // rawCameraMgmt.drawWebGlTextureIntoCorner(texture, width, height);
+            //         for (const { texture, height, width } of rawTextures) {
+            //             const tensor = depthEstimator.webGlTextureToTensor(texture, width, height);
+            //             depthEstimator.estimate(tensor, 10, 0.1).then((depth) => {
+            //                 depth.toCanvasImageSource().then((cis: CanvasImageSource) => {
+            //                     depthContainer.childNodes.forEach((cn) => depthContainer.removeChild(cn));
+            //                     depthContainer.append(cis as any);
+            //                 });
+            //             });
+            //         }
+            //     }
+            // }
 
             // state-input
 
@@ -418,13 +438,13 @@ async function main(
  ****************************************************************************************************/
 
 const dn = document.getElementById("debugNotes") as HTMLDivElement;
+const container = document.getElementById("app") as HTMLDivElement;
+const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+const overlay = document.getElementById("overlay") as HTMLDivElement;
+const depthContainer = document.getElementById("depthContainer") as HTMLDivElement;
 
 async function run() {
     try {
-        const container = document.getElementById("app") as HTMLDivElement;
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        const overlay = document.getElementById("overlay") as HTMLDivElement;
-
         const tl = new TextureLoader();
         const [
             sunTexture,
