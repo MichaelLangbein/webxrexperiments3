@@ -1,26 +1,15 @@
 import {
-    AdditiveBlending,
-    CircleGeometry,
-    Group,
-    Mesh,
-    MeshBasicMaterial,
-    MeshLambertMaterial,
-    MeshPhongMaterial,
-    PCFSoftShadowMap,
-    PointLight,
-    Scene,
-    SphereGeometry,
-    Texture,
-    TextureLoader,
-    Vector2,
-    Vector3,
-    WebGLRenderer,
+    AdditiveBlending, CircleGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+    MeshPhongMaterial, PCFSoftShadowMap, PointLight, Scene, SphereGeometry, Texture, TextureLoader,
+    Vector2, Vector3
 } from "three";
 import { ARButton, HTMLMesh } from "three/examples/jsm/Addons.js";
 
 import { StateMgmt } from "./state_mgmt";
-import { SpinningCursor, PickHelper } from "./utils";
+import { WebGLRenderer } from "./three.module.js";
+import { PickHelper, SpinningCursor } from "./utils";
 import { RawCameraMgmt } from "./webxr";
+
 
 /**
  * https://threejs.org/manual/#en/webxr-look-to-select
@@ -151,7 +140,7 @@ async function main(
         alpha: true,
         canvas,
         failIfMajorPerformanceCaveat: true,
-    });
+    }) as any;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = PCFSoftShadowMap; // default THREE.PCFShadowMap
 
@@ -321,27 +310,12 @@ async function main(
             }
         }, 1000);
 
-        renderer.setAnimationLoop((time, frame) => {
+        renderer.setAnimationLoop((time: number, frame: XRFrame) => {
             const state = stateMgmt.getCurrentState();
             if (!state.vrActive) return;
             const camera = renderer.xr.getCamera();
 
-            // if (frame) {
-            //     const rawTextures = rawCameraMgmt.getRawWebGlTextureRefs(frame);
-            //     if (rawTextures.length) {
-            //         // const { texture, height, width } = rawTextures[0];
-            //         // rawCameraMgmt.drawWebGlTextureIntoCorner(texture, width, height);
-            //         for (const { texture, height, width } of rawTextures) {
-            //             const tensor = depthEstimator.webGlTextureToTensor(texture, width, height);
-            //             depthEstimator.estimate(tensor, 10, 0.1).then((depth) => {
-            //                 depth.toCanvasImageSource().then((cis: CanvasImageSource) => {
-            //                     depthContainer.childNodes.forEach((cn) => depthContainer.removeChild(cn));
-            //                     depthContainer.append(cis as any);
-            //                 });
-            //             });
-            //         }
-            //     }
-            // }
+            const depthCpu: XRCPUDepthInformation = renderer.xr.getDepthTextureCpu();
 
             // state-input
 
