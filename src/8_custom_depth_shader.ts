@@ -14,6 +14,7 @@ import {
     MeshLambertMaterial,
     MeshPhongMaterial,
     PCFSoftShadowMap,
+    PlaneGeometry,
     PointLight,
     RedFormat,
     Scene,
@@ -227,6 +228,7 @@ async function main(
         insert = `
             zDepthScene = -1.0 * mvPosition.z;
         `;
+        shader.vertexShader = shader.vertexShader.replace(token, token + insert);
 
         // fragment: register realWorldDepth texture
         token = "#include <common>";
@@ -242,9 +244,15 @@ async function main(
         insert = `
                 vec2 coord = coordTrans * gl_FragCoord.xy + vec2(1.0,1.0);
                 float zDepthReal = texture2D(realWorldDepth, coord.yx).x;
-                if (zDepthReal < zDepthScene) {
-                    gl_FragColor.a = 0.1;
+
+                // if depth-information given at all:
+                if (zDepthReal > 0.01) {
+                    // if "distance to object" > "distance to next wall":
+                    if (zDepthScene > zDepthReal * 1.1) {
+                        gl_FragColor.a = 0.01;
+                    }
                 }
+
             `;
         shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
     };
@@ -254,6 +262,11 @@ async function main(
      ****************************************************************************************************/
 
     const scene = new Scene();
+
+    // const testplane = new Mesh(new PlaneGeometry(1, 1, 2, 2), new MeshBasicMaterial({ color: "green" }));
+    // testplane.material.onBeforeCompile = myBeforeCompile;
+    // testplane.position.set(0, 0, -1);
+    // scene.add(testplane);
 
     const solarSystem = new Group();
     solarSystem.position.set(0, 0, -2);
