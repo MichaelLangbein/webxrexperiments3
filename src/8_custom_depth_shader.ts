@@ -5,16 +5,22 @@ import {
     DepthFormat,
     FloatType,
     Group,
+    Line,
+    LinearFilter,
+    LuminanceAlphaFormat,
+    LuminanceFormat,
     Mesh,
     MeshBasicMaterial,
     MeshLambertMaterial,
     MeshPhongMaterial,
     PCFSoftShadowMap,
     PointLight,
+    RedFormat,
     Scene,
     SphereGeometry,
     Texture,
     TextureLoader,
+    UnsignedByteType,
     Vector2,
     Vector3,
     WebGLProgramParametersWithUniforms,
@@ -169,8 +175,8 @@ async function main(
     renderer.xr.enabled = true;
 
     const button = ARButton.createButton(renderer, {
-        requiredFeatures: ["hit-test", "dom-overlay"],
-        optionalFeatures: ["camera-access", "depth-sensing", "layers"],
+        requiredFeatures: ["hit-test", "dom-overlay", "depth-sensing"],
+        optionalFeatures: [],
         domOverlay: {
             root: overlay,
         },
@@ -193,6 +199,36 @@ async function main(
     const picker = new PickHelper(pickingDuration);
 
     /****************************************************************************************************
+     * Depth material
+     ****************************************************************************************************/
+
+    // https://github.com/graemeniedermayer/ArExperiments/blob/main/javascript/depthDiscard.js
+    // https://github.com/graemeniedermayer/ArExperiments/blob/302c2021874dc7fd3f016ee81a172ba2ffbb4c22/html/depthOcclusion.html#L21
+    // https://discourse.threejs.org/t/data3dtexture-where-each-pixel-is-16-bits-precision/49321/6
+
+    const realWorldDepthData = new Uint8Array(160 * 90);
+    const realWorldDepth = new DataTexture(realWorldDepthData, 160, 90, RedFormat, UnsignedByteType);
+    realWorldDepth.magFilter = LinearFilter;
+
+    const myBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+        shader.uniforms.realWorldDepth = { value: realWorldDepth };
+
+        let token = "#include <common>";
+        let insert = /* glsl */ `
+                uniform sampler2D realWorldDepth;
+            `;
+        shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
+
+        token = "#include <dithering_fragment>";
+        insert = /* glsl */ `
+                float depth = texture(realWorldDepth, vMapUv).x;
+                gl_FragColor.a = (1.0 - depth) / 1.0;
+                gl_FragColor = vec4(depth, depth, depth, 1.0);
+            `;
+        shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
+    };
+
+    /****************************************************************************************************
      * solar system
      ****************************************************************************************************/
 
@@ -202,8 +238,12 @@ async function main(
     solarSystem.position.set(0, 0, -4);
     scene.add(solarSystem);
 
-    const sun = new Mesh(new SphereGeometry(0.5, 32, 32), new MeshBasicMaterial({ color: "yellow", map: sunTex }));
+    const sun = new Mesh(
+        new SphereGeometry(0.5, 32, 32),
+        new MeshBasicMaterial({ color: "yellow", map: sunTex, depthTest: true, depthWrite: true })
+    );
     sun.userData["name"] = "sun";
+    sun.material.onBeforeCompile = myBeforeCompile;
     solarSystem.add(sun);
     const sunLight = new PointLight("white", 10);
     sunLight.castShadow = true;
@@ -246,6 +286,7 @@ async function main(
         })
     );
     earth.userData["name"] = "earth";
+    earth.material.onBeforeCompile = myBeforeCompile;
     earth.position.set(2, 0, 0);
     earth.castShadow = true;
     earth.receiveShadow = true;
@@ -259,6 +300,7 @@ async function main(
         })
     );
     earth.add(lights);
+    lights.material.onBeforeCompile = myBeforeCompile;
 
     const clouds = new Mesh(
         new SphereGeometry(0.205, 32, 32),
@@ -266,6 +308,7 @@ async function main(
     );
     clouds.receiveShadow = true;
     earth.add(clouds);
+    clouds.material.onBeforeCompile = myBeforeCompile;
 
     const lunarOrbit = new Group();
     earth.add(lunarOrbit);
@@ -273,6 +316,7 @@ async function main(
     moon.castShadow = true;
     moon.receiveShadow = true;
     moon.userData["name"] = "moon";
+    moon.material.onBeforeCompile = myBeforeCompile;
     moon.position.set(0.5, 0, 0);
     lunarOrbit.add(moon);
 
@@ -312,9 +356,6 @@ async function main(
     };
 
     const cursor = new SpinningCursor(1, pickingDuration);
-    // const rawCameraMgmt = new RawCameraMgmt(renderer);
-    // const depthEstimator = new DepthEstimator();
-    // await depthEstimator.init();
 
     function redScaleDepth(depth: number, dMin: number, dMax: number) {
         const rMin = 0;
@@ -369,6 +410,16 @@ async function main(
                     depthContainer.height = dsci.height;
                     const imgData = new ImageData(colorArr, dsci.width, dsci.height);
                     ctx!.putImageData(imgData, 0, 0);
+
+                    // parse as uint16
+                    const uint16data = new Uint16Array(dsci.data);
+                    // cast to uint8
+                    const uint8data = new Uint8Array(uint16data);
+                    // upload
+                    realWorldDepthData.set(uint8data);
+                    realWorldDepth.needsUpdate = true;
+
+                    console.log({ uint16: uint16data.slice(100, 110), unt8: uint8data.slice(100, 110) });
                 }
             }
 
