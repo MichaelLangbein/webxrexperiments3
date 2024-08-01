@@ -209,9 +209,11 @@ async function main(
     const realWorldDepthData = new Float32Array(160 * 90);
     const realWorldDepth = new DataTexture(realWorldDepthData, 160, 90, RedFormat, FloatType);
     realWorldDepth.magFilter = LinearFilter;
+    const coordTrans = new Vector2();
 
     const myBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
         shader.uniforms.realWorldDepth = { value: realWorldDepth };
+        shader.uniforms.coordTrans = { value: coordTrans };
 
         // vertex: register varying `zDepthScene`
         let token = "#include <common>";
@@ -231,16 +233,18 @@ async function main(
         insert = `
                 varying float zDepthScene;
                 uniform sampler2D realWorldDepth;
+                uniform vec2 coordTrans; 
             `;
         shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
 
         // fragment: read from realWorldDepth texture
         token = "#include <dithering_fragment>";
         insert = `
-                float zDepthReal = texture(realWorldDepth, vMapUv).x;
-                gl_FragColor.a = (1.0 - zDepthReal) / 1.0;
-                gl_FragColor = vec4(zDepthReal, zDepthReal, zDepthReal, 1.0);
-                gl_FragColor = vec4(zDepthScene, zDepthScene, zDepthScene, 1.0);
+                vec2 coord = coordTrans * gl_FragCoord.xy + vec2(1.0,1.0);
+                float zDepthReal = texture2D(realWorldDepth, coord.yx).x;
+                if (zDepthReal < zDepthScene) {
+                    gl_FragColor.a = 0.1;
+                }
             `;
         shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
     };
@@ -429,24 +433,44 @@ async function main(
                     ctx!.putImageData(imgData, 0, 0);
 
                     /**
-                     * Uploading depth data to GPU.
-                     * We could directly upload the raw data ...
-                     * ... but the raw data is Ui16, for which there is no common WebGL texture-format.
-                     * One could use Ui8, but then we loose every value > 255.
-                     * So the next best thing is to use f32 ... and since this requires some re-scaling anyway,
-                     * we might as well do the `rawValueToMeters` multiplication here on the CPU.
-                     * Would be more performant on the GPU, of course.
+                     * getting viewport
                      */
-                    // parse as uint16
-                    const uint16data = new Uint16Array(dsci.data);
-                    // cast to uint8
-                    const float32data = new Float32Array(uint16data.length);
-                    for (let i = 0; i < uint16data.length; i++) {
-                        float32data[i] = uint16data[i] * dsci.rawValueToMeters;
+                    let viewport: XRViewport | undefined;
+                    const session = frame.session;
+                    const xrRefSpace = renderer.xr.getReferenceSpace();
+                    if (xrRefSpace) {
+                        const baseLayer = session.renderState.baseLayer;
+                        if (baseLayer) {
+                            const pose = frame.getViewerPose(xrRefSpace)!;
+                            if (pose) {
+                                viewport = baseLayer.getViewport(pose.views[0]);
+                            }
+                        }
                     }
-                    // upload
-                    realWorldDepthData.set(float32data);
-                    realWorldDepth.needsUpdate = true;
+
+                    if (viewport) {
+                        /**
+                         * Uploading depth data to GPU.
+                         * We could directly upload the raw data ...
+                         * ... but the raw data is Ui16, for which there is no common WebGL texture-format.
+                         * One could use Ui8, but then we loose every value > 255.
+                         * So the next best thing is to use f32 ... and since this requires some re-scaling anyway,
+                         * we might as well do the `rawValueToMeters` multiplication here on the CPU.
+                         * Would be more performant on the GPU, of course.
+                         */
+                        // parse as uint16
+                        const uint16data = new Uint16Array(dsci.data);
+                        // cast to uint8
+                        const float32data = new Float32Array(uint16data.length);
+                        for (let i = 0; i < uint16data.length; i++) {
+                            float32data[i] = uint16data[i] * dsci.rawValueToMeters;
+                        }
+                        // upload
+                        realWorldDepthData.set(float32data);
+                        realWorldDepth.needsUpdate = true;
+                        coordTrans.x = -1 / viewport.width;
+                        coordTrans.y = -1 / viewport.height;
+                    }
                 }
             }
 
