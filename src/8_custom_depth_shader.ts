@@ -215,26 +215,32 @@ async function main(
 
         // vertex: register varying `zDepthScene`
         let token = "#include <common>";
-        let insert = "varying float zDepthScene;";
+        let insert = `
+            varying float zDepthScene;
+        `;
         shader.vertexShader = shader.vertexShader.replace(token, token + insert);
 
         // vertex: output varying `zDepthScene`
-        token = "#include <fog_vertex>";
-        insert = "zDepthScene = -1.0 * mvPosition.z";
+        token = "#include <project_vertex>";
+        insert = `
+            zDepthScene = -1.0 * mvPosition.z;
+        `;
 
         // fragment: register realWorldDepth texture
         token = "#include <common>";
-        insert = /* glsl */ `
+        insert = `
+                varying float zDepthScene;
                 uniform sampler2D realWorldDepth;
             `;
         shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
 
         // fragment: read from realWorldDepth texture
         token = "#include <dithering_fragment>";
-        insert = /* glsl */ `
+        insert = `
                 float zDepthReal = texture(realWorldDepth, vMapUv).x;
                 gl_FragColor.a = (1.0 - zDepthReal) / 1.0;
                 gl_FragColor = vec4(zDepthReal, zDepthReal, zDepthReal, 1.0);
+                gl_FragColor = vec4(zDepthScene, zDepthScene, zDepthScene, 1.0);
             `;
         shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
     };
@@ -246,7 +252,7 @@ async function main(
     const scene = new Scene();
 
     const solarSystem = new Group();
-    solarSystem.position.set(0, 0, -4);
+    solarSystem.position.set(0, 0, -2);
     scene.add(solarSystem);
 
     const sun = new Mesh(
