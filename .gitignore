@@ -7,7 +7,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+!node_modules
+node_modules/*
+!node_modules/three/
+node_modules/three/*
+!node_modules/three/build/
+node_modules/three/build/*
+!node_modules/three/build/three.module.js
+
 dist
 dist-ssr
 *.local

@@ -1,15 +1,25 @@
 import {
-    AdditiveBlending, CircleGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-    MeshPhongMaterial, PCFSoftShadowMap, PointLight, Scene, SphereGeometry, Texture, TextureLoader,
-    Vector2, Vector3
+    AdditiveBlending,
+    CircleGeometry,
+    Group,
+    Mesh,
+    MeshBasicMaterial,
+    MeshLambertMaterial,
+    MeshPhongMaterial,
+    PCFSoftShadowMap,
+    PointLight,
+    Scene,
+    SphereGeometry,
+    Texture,
+    TextureLoader,
+    Vector2,
+    Vector3,
+    WebGLRenderer,
 } from "three";
 import { ARButton, HTMLMesh } from "three/examples/jsm/Addons.js";
 
 import { StateMgmt } from "./state_mgmt";
-import { WebGLRenderer } from "./three.module.js";
 import { PickHelper, SpinningCursor } from "./utils";
-import { RawCameraMgmt } from "./webxr";
-
 
 /**
  * https://threejs.org/manual/#en/webxr-look-to-select
@@ -140,7 +150,7 @@ async function main(
         alpha: true,
         canvas,
         failIfMajorPerformanceCaveat: true,
-    }) as any;
+    });
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = PCFSoftShadowMap; // default THREE.PCFShadowMap
 
@@ -150,7 +160,7 @@ async function main(
     const button = ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test", "dom-overlay", "depth-sensing"],
         // optionalFeatures: ["camera-access"],
-        optionalFeatures: ["layers"],
+        // optionalFeatures: ["layers"],
         domOverlay: {
             root: overlay,
         },
@@ -292,9 +302,17 @@ async function main(
     };
 
     const cursor = new SpinningCursor(1, pickingDuration);
-    const rawCameraMgmt = new RawCameraMgmt(renderer);
+    // const rawCameraMgmt = new RawCameraMgmt(renderer);
     // const depthEstimator = new DepthEstimator();
     // await depthEstimator.init();
+
+    function redScaleDepth(depth: number, dMin: number, dMax: number) {
+        const rMin = 0;
+        const rMax = 255;
+        const frac = (depth - dMin) / (dMax - dMin);
+        const r = frac * (rMax - rMin) + rMin;
+        return [r, 0, 0, 255];
+    }
 
     /****************************************************************************************************
      * loop
@@ -315,7 +333,31 @@ async function main(
             if (!state.vrActive) return;
             const camera = renderer.xr.getCamera();
 
-            const depthCpu: XRCPUDepthInformation = renderer.xr.getDepthTextureCpu();
+            // @ts-ignore
+            const depthCpu = renderer.xr.getDepthTextureCpu();
+            // @ts-ignore
+            if (depthCpu && depthCpu.type === "uint16") {
+                const dsci = depthCpu.depthSensingCpuInfo;
+                const colorArr = new Uint8ClampedArray(dsci.width * dsci.height * 4);
+                let i = 0;
+                for (let r = 0; r < dsci.height; r++) {
+                    for (let c = 0; c < dsci.width; c++) {
+                        // @ts-ignore
+                        const depth = renderer.xr.getDepthTextureCpuInMeters(r, c);
+                        const color = redScaleDepth(depth, 0, 10);
+                        colorArr[i + 0] = color[0];
+                        colorArr[i + 1] = color[1];
+                        colorArr[i + 2] = color[2];
+                        colorArr[i + 3] = color[3];
+                        i += 4;
+                    }
+                }
+                const ctx = depthContainer.getContext("2d");
+                depthContainer.width = dsci.width;
+                depthContainer.height = dsci.height;
+                const imgData = new ImageData(colorArr, dsci.width, dsci.height);
+                ctx!.putImageData(imgData, 0, 0);
+            }
 
             // state-input
 
@@ -415,7 +457,7 @@ const dn = document.getElementById("debugNotes") as HTMLDivElement;
 const container = document.getElementById("app") as HTMLDivElement;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const overlay = document.getElementById("overlay") as HTMLDivElement;
-const depthContainer = document.getElementById("depthContainer") as HTMLDivElement;
+const depthContainer = document.getElementById("depthContainer") as HTMLCanvasElement;
 
 async function run() {
     try {
