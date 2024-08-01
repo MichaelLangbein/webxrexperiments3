@@ -206,8 +206,8 @@ async function main(
     // https://github.com/graemeniedermayer/ArExperiments/blob/302c2021874dc7fd3f016ee81a172ba2ffbb4c22/html/depthOcclusion.html#L21
     // https://discourse.threejs.org/t/data3dtexture-where-each-pixel-is-16-bits-precision/49321/6
 
-    const realWorldDepthData = new Uint8Array(160 * 90);
-    const realWorldDepth = new DataTexture(realWorldDepthData, 160, 90, RedFormat, UnsignedByteType);
+    const realWorldDepthData = new Float32Array(160 * 90);
+    const realWorldDepth = new DataTexture(realWorldDepthData, 160, 90, RedFormat, FloatType);
     realWorldDepth.magFilter = LinearFilter;
 
     const myBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
@@ -414,12 +414,13 @@ async function main(
                     // parse as uint16
                     const uint16data = new Uint16Array(dsci.data);
                     // cast to uint8
-                    const uint8data = new Uint8Array(uint16data);
+                    const float32data = new Float32Array(uint16data.length);
+                    for (let i = 0; i < uint16data.length; i++) {
+                        float32data[i] = uint16data[i] * dsci.rawValueToMeters;
+                    }
                     // upload
-                    realWorldDepthData.set(uint8data);
+                    realWorldDepthData.set(float32data);
                     realWorldDepth.needsUpdate = true;
-
-                    console.log({ uint16: uint16data.slice(100, 110), unt8: uint8data.slice(100, 110) });
                 }
             }
 
