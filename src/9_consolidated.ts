@@ -79,65 +79,14 @@ class SceneMgmt {
     readonly sunBloom2: Mesh;
     readonly picker: PickHelper;
     readonly cursor: SpinningCursor;
-    planetData: { [name: string]: { mesh: Mesh; orbit: Group; info: HTMLMesh } };
+    private planetData: { [name: string]: { mesh: Mesh; orbit: Group; info: HTMLMesh } };
+    private realWorldDepthData?: Float32Array;
+    private realWorldDepth?: DataTexture;
+    private coordTrans?: Vector2;
 
     constructor(private depth: "none" | "cpu" | "gpu") {
         const pickingDuration = 750;
         const picker = new PickHelper(pickingDuration);
-
-        // https://github.com/graemeniedermayer/ArExperiments/blob/main/javascript/depthDiscard.js
-        // https://github.com/graemeniedermayer/ArExperiments/blob/302c2021874dc7fd3f016ee81a172ba2ffbb4c22/html/depthOcclusion.html#L21
-        // https://discourse.threejs.org/t/data3dtexture-where-each-pixel-is-16-bits-precision/49321/6
-
-        const realWorldDepthData = new Float32Array(160 * 90);
-        const realWorldDepth = new DataTexture(realWorldDepthData, 160, 90, RedFormat, FloatType);
-        realWorldDepth.magFilter = LinearFilter;
-        const coordTrans = new Vector2();
-
-        const myBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
-            shader.uniforms.realWorldDepth = { value: realWorldDepth };
-            shader.uniforms.coordTrans = { value: coordTrans };
-
-            // vertex: register varying `zDepthScene`
-            let token = "#include <common>";
-            let insert = `
-                varying float zDepthScene;
-            `;
-            shader.vertexShader = shader.vertexShader.replace(token, token + insert);
-
-            // vertex: output varying `zDepthScene`
-            token = "#include <project_vertex>";
-            insert = `
-                zDepthScene = -1.0 * mvPosition.z;
-            `;
-            shader.vertexShader = shader.vertexShader.replace(token, token + insert);
-
-            // fragment: register realWorldDepth texture
-            token = "#include <common>";
-            insert = `
-                    varying float zDepthScene;
-                    uniform sampler2D realWorldDepth;
-                    uniform vec2 coordTrans; 
-                `;
-            shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
-
-            // fragment: read from realWorldDepth texture
-            token = "#include <dithering_fragment>";
-            insert = `
-                    vec2 coord = coordTrans * gl_FragCoord.xy + vec2(1.0,1.0);
-                    float zDepthReal = texture2D(realWorldDepth, coord.yx).x;
-    
-                    // if depth-information given at all:
-                    if (zDepthReal > 0.01) {
-                        // if "distance to object" > "distance to next wall":
-                        if (zDepthScene > zDepthReal * 1.1) {
-                            gl_FragColor.a = 0.01;
-                        }
-                    }
-    
-                `;
-            shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
-        };
 
         const scene = new Scene();
 
@@ -147,10 +96,9 @@ class SceneMgmt {
 
         const sun = new Mesh(
             new SphereGeometry(0.5, 32, 32),
-            new MeshBasicMaterial({ color: "yellow", map: sunTexture, depthTest: true, depthWrite: true })
+            new MeshBasicMaterial({ map: sunTexture, depthTest: true, depthWrite: true })
         );
         sun.userData["name"] = "sun";
-        sun.material.onBeforeCompile = myBeforeCompile;
         solarSystem.add(sun);
         const sunLight = new PointLight("white", 10);
         sunLight.castShadow = true;
@@ -193,7 +141,6 @@ class SceneMgmt {
             })
         );
         earth.userData["name"] = "earth";
-        earth.material.onBeforeCompile = myBeforeCompile;
         earth.position.set(2, 0, 0);
         earth.castShadow = true;
         earth.receiveShadow = true;
@@ -207,7 +154,6 @@ class SceneMgmt {
             })
         );
         earth.add(lights);
-        lights.material.onBeforeCompile = myBeforeCompile;
 
         const clouds = new Mesh(
             new SphereGeometry(0.205, 32, 32),
@@ -215,7 +161,6 @@ class SceneMgmt {
         );
         clouds.receiveShadow = true;
         earth.add(clouds);
-        clouds.material.onBeforeCompile = myBeforeCompile;
 
         const lunarOrbit = new Group();
         earth.add(lunarOrbit);
@@ -223,7 +168,6 @@ class SceneMgmt {
         moon.castShadow = true;
         moon.receiveShadow = true;
         moon.userData["name"] = "moon";
-        moon.material.onBeforeCompile = myBeforeCompile;
         moon.position.set(0.5, 0, 0);
         lunarOrbit.add(moon);
 
@@ -280,6 +224,72 @@ class SceneMgmt {
         this.picker = picker;
         this.cursor = cursor;
         this.planetData = planetData;
+
+        if (this.depth === "cpu") {
+            // https://github.com/graemeniedermayer/ArExperiments/blob/main/javascript/depthDiscard.js
+            // https://github.com/graemeniedermayer/ArExperiments/blob/302c2021874dc7fd3f016ee81a172ba2ffbb4c22/html/depthOcclusion.html#L21
+            // https://discourse.threejs.org/t/data3dtexture-where-each-pixel-is-16-bits-precision/49321/6
+
+            const realWorldDepthData = new Float32Array(160 * 90);
+            const realWorldDepth = new DataTexture(realWorldDepthData, 160, 90, RedFormat, FloatType);
+            realWorldDepth.magFilter = LinearFilter;
+            const coordTrans = new Vector2();
+
+            this.realWorldDepthData = realWorldDepthData;
+            this.realWorldDepth = realWorldDepth;
+            this.coordTrans = coordTrans;
+
+            const myBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+                shader.uniforms.realWorldDepth = { value: realWorldDepth };
+                shader.uniforms.coordTrans = { value: coordTrans };
+
+                // vertex: register varying `zDepthScene`
+                let token = "#include <common>";
+                let insert = `
+                varying float zDepthScene;
+            `;
+                shader.vertexShader = shader.vertexShader.replace(token, token + insert);
+
+                // vertex: output varying `zDepthScene`
+                token = "#include <project_vertex>";
+                insert = `
+                zDepthScene = -1.0 * mvPosition.z;
+            `;
+                shader.vertexShader = shader.vertexShader.replace(token, token + insert);
+
+                // fragment: register realWorldDepth texture
+                token = "#include <common>";
+                insert = `
+                    varying float zDepthScene;
+                    uniform sampler2D realWorldDepth;
+                    uniform vec2 coordTrans; 
+                `;
+                shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
+
+                // fragment: read from realWorldDepth texture
+                token = "#include <dithering_fragment>";
+                insert = `
+                    vec2 coord = coordTrans * gl_FragCoord.xy + vec2(1.0,1.0);
+                    float zDepthReal = texture2D(realWorldDepth, coord.yx).x;
+    
+                    // if depth-information given at all:
+                    if (zDepthReal > 0.01) {
+                        // if "distance to object" > "distance to next wall":
+                        if (zDepthScene > zDepthReal * 1.1) {
+                            gl_FragColor.a = 0.01;
+                        }
+                    }
+    
+                `;
+                shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
+            };
+
+            sun.material.onBeforeCompile = myBeforeCompile;
+            earth.material.onBeforeCompile = myBeforeCompile;
+            lights.material.onBeforeCompile = myBeforeCompile;
+            clouds.material.onBeforeCompile = myBeforeCompile;
+            moon.material.onBeforeCompile = myBeforeCompile;
+        }
     }
 
     animate(time: number, frame: XRFrame, camera: PerspectiveCamera, depthData: DepthInfo, activeBody?: Body) {
@@ -341,10 +351,10 @@ class SceneMgmt {
                     float32data[i] = uint16data[i] * depthSensingCpuInfo.rawValueToMeters;
                 }
                 // upload
-                realWorldDepthData.set(float32data);
-                realWorldDepth.needsUpdate = true;
-                coordTrans.x = -1 / viewport.width;
-                coordTrans.y = -1 / viewport.height;
+                this.realWorldDepthData!.set(float32data);
+                this.realWorldDepth!.needsUpdate = true;
+                this.coordTrans!.x = -1 / viewport.width;
+                this.coordTrans!.y = -1 / viewport.height;
             }
         } else if (this.depth === "gpu" && depthData["gpu"]) {
             // @TODO
@@ -361,13 +371,16 @@ interface DepthInfo {
 }
 
 interface State {
-    pickedBody?: Body;
+    session: boolean;
     playing: boolean;
+    pickedBody?: Body;
 }
 
 /**
  * Responsible for
  *  - handling webxr state
+ *      - pick gpu or cpu depth
+ *  - handling app state
  *  - handling user events
  */
 class App {
@@ -388,9 +401,9 @@ class App {
         renderer.shadowMap.type = PCFSoftShadowMap;
         renderer.setPixelRatio(window.devicePixelRatio);
 
-        renderer.xr.addEventListener("sessionstart", this.onSessionStart);
-        renderer.xr.addEventListener("sessionend", this.onSessionEnd);
-        renderer.setAnimationLoop(this.onAnimationLoop);
+        renderer.xr.addEventListener("sessionstart", (evt) => this.onSessionStart(evt));
+        renderer.xr.addEventListener("sessionend", (evt) => this.onSessionEnd(evt));
+        renderer.setAnimationLoop((time, frame) => this.onAnimationLoop(time, frame));
 
         const arb = ARButton.createButton(renderer, {
             requiredFeatures: ["dom-overlay"],
@@ -408,7 +421,6 @@ class App {
     }
 
     private onSessionStart(evt: Event<"sessionstart", WebXRManager>) {
-        overlay.style.setProperty("visibility", "visible");
         const session = evt.target.getSession();
         if (!session) throw new Error("Couldn't get hold of session");
         if (session.enabledFeatures?.includes("depth-sensing")) {
@@ -426,10 +438,11 @@ class App {
         overlay.style.setProperty("visibility", "hidden");
     }
 
-    private onAnimationLoop(time: number, frame: XRFrame) {
+    private onAnimationLoop(time: number, frame?: XRFrame) {
         if (!this.state.playing) return;
 
         if (!this.sceneMgmt) return;
+        if (!frame) return;
         const session = frame.session;
         const xrRefSpace = this.renderer.xr.getReferenceSpace();
         if (!xrRefSpace) return;
@@ -492,8 +505,8 @@ class App {
         this.setState({ ...this.state, playing });
     }
 
-    public onExit() {
-        this.setState({ pickedBody: undefined, playing: false });
+    public onExitClicked() {
+        this.setState({ pickedBody: undefined, playing: false, session: false });
     }
 
     public watchState(cb: (state: State) => void) {
@@ -505,22 +518,23 @@ class App {
         for (const cb of this.subscribers) {
             cb(this.state);
         }
+        if (state.session === false) this.renderer.xr.getSession()?.end();
     }
 }
 
-const app = new App({ playing: true, pickedBody: undefined });
+const app = new App({ session: false, playing: true, pickedBody: undefined });
 
-exitButton.addEventListener("click", (_) => app.onExit());
+exitButton.addEventListener("click", (_) => app.onExitClicked());
 pauseButton.addEventListener("click", (_) => {
     if (pauseButton.innerHTML.includes("□")) app.setPlaying(false);
     else app.setPlaying(true);
 });
 selection.addEventListener("change", (evt: any) => app.onBodyPicked(evt.target.value));
 app.watchState((state) => {
-    if (state.pickedBody) selection.value = state.pickedBody;
-    else selection.value = "none";
+    if (state.session) overlay.style.setProperty("visibility", "visible");
+    else overlay.style.setProperty("visibility", "hidden");
     if (state.playing) pauseButton.innerHTML = "□";
     else pauseButton.innerHTML = "▷";
-    // if (state.vrActive) overlay.style.setProperty("visibility", "visible");
-    //     else overlay.style.setProperty("visibility", "hidden");
+    if (state.pickedBody) selection.value = state.pickedBody;
+    else selection.value = "none";
 });

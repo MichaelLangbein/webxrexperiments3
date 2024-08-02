@@ -11,13 +11,14 @@
   "devDependencies": {
     "@types/three": "^0.166.0",
     "typescript": "^5.2.2",
-    "vite": "^5.3.4"
+    "vite": "^5.3.4",
+    "vite-plugin-top-level-await": "^1.4.2"
   },
   "dependencies": {
     "three": "^0.166.1"
   },
   "peerDependencies": {
-    "@tensorflow/tfjs": "4.20.0",
-    "@tensorflow-models/depth-estimation": "0.0.4"
+    "@tensorflow-models/depth-estimation": "0.0.4",
+    "@tensorflow/tfjs": "4.20.0"
   }
 }
