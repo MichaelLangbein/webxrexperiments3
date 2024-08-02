@@ -83,6 +83,7 @@ class SceneMgmt {
     private realWorldDepthData?: Float32Array;
     private realWorldDepth?: DataTexture;
     private coordTrans?: Vector2;
+    private depthMesh?: Mesh;
 
     constructor(private depth: "none" | "cpu" | "gpu") {
         const pickingDuration = 750;
@@ -296,14 +297,18 @@ class SceneMgmt {
         // 1: picker & cursor
         const { object, fraction } = this.picker.pick(new Vector2(0, 0), this.scene, camera, time);
         if (object && fraction < 1.0) {
-            const cursorMesh = this.cursor.getMesh();
-            const meshRadius = (object as Mesh).geometry?.boundingSphere?.radius;
-            if (meshRadius) cursorMesh.scale.setScalar(1.2 * meshRadius);
-            cursorMesh.visible = true;
-            object.add(cursorMesh);
             const id = object.userData["name"];
-            this.cursor.update(time, id);
-            cursorMesh.lookAt(camera.position);
+            if (id !== activeBody) {
+                const cursorMesh = this.cursor.getMesh();
+                const meshRadius = (object as Mesh).geometry?.boundingSphere?.radius;
+                if (meshRadius) cursorMesh.scale.setScalar(1.2 * meshRadius);
+                cursorMesh.visible = true;
+                object.add(cursorMesh);
+                this.cursor.update(time, id);
+                cursorMesh.lookAt(camera.position);
+            } else {
+                this.cursor.getMesh().visible = false;
+            }
         } else {
             this.cursor.getMesh().visible = false;
         }
@@ -357,7 +362,12 @@ class SceneMgmt {
                 this.coordTrans!.y = -1 / viewport.height;
             }
         } else if (this.depth === "gpu" && depthData["gpu"]) {
-            // @TODO
+            const mesh = depthData["gpu"];
+            if (mesh !== this.depthMesh) {
+                this.depthMesh = mesh;
+                mesh.position.set(0, 0, -2);
+                camera.add(mesh);
+            }
         }
 
         // 5. return current state
@@ -367,7 +377,7 @@ class SceneMgmt {
 
 interface DepthInfo {
     cpu?: { depthSensingCpuInfo: XRCPUDepthInformation; type: "uint16" | "float32"; viewport: XRViewport };
-    gpu?: Texture;
+    gpu?: Mesh;
 }
 
 interface State {
@@ -412,6 +422,9 @@ class App {
                 usagePreference: ["cpu-optimized", "gpu-optimized"],
                 dataFormatPreference: ["luminance-alpha"],
             },
+            domOverlay: {
+                root: overlay,
+            },
         });
 
         container.append(arb);
@@ -432,10 +445,11 @@ class App {
         } else {
             this.sceneMgmt = new SceneMgmt("none");
         }
+        this.setState({ session: true, playing: true, pickedBody: undefined });
     }
 
     private onSessionEnd(evt: Event<"sessionend", WebXRManager>) {
-        overlay.style.setProperty("visibility", "hidden");
+        this.setState({ session: false, playing: true, pickedBody: undefined });
     }
 
     private onAnimationLoop(time: number, frame?: XRFrame) {
@@ -478,8 +492,9 @@ class App {
         const depthData: DepthInfo = {};
         if (session.enabledFeatures?.includes("depth-sensing")) {
             if (session.depthUsage === "gpu-optimized") {
-                const depthTextue = this.renderer.xr.getDepthTexture();
-                depthData["gpu"] = depthTextue || undefined;
+                // const depthTextue = this.renderer.xr.getDepthTexture();
+                const coverMesh = this.renderer.xr.getDepthSensingMesh();
+                depthData["gpu"] = coverMesh || undefined;
             } else {
                 // @ts-ignore
                 const depthInfo = this.renderer.xr.getDepthTextureCpu();
