@@ -22,7 +22,6 @@ import {
     Vector3,
     WebGLProgramParametersWithUniforms,
     PerspectiveCamera,
-    Texture,
 } from "three";
 import { ARButton, HTMLMesh } from "three/examples/jsm/Addons.js";
 import { PickHelper, SpinningCursor } from "./utils";
@@ -37,6 +36,8 @@ const depthContainer = document.getElementById("depthContainer") as HTMLCanvasEl
 const exitButton = document.getElementById("exit") as HTMLButtonElement;
 const pauseButton = document.getElementById("stop") as HTMLButtonElement;
 const selection = document.getElementById("planets") as HTMLSelectElement;
+depthContainer.remove();
+dn.remove();
 
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
@@ -293,7 +294,14 @@ class SceneMgmt {
         }
     }
 
-    animate(time: number, frame: XRFrame, camera: PerspectiveCamera, depthData: DepthInfo, activeBody?: Body) {
+    animate(
+        time: number,
+        frame: XRFrame,
+        camera: PerspectiveCamera,
+        depthData: DepthInfo,
+        playing: boolean,
+        activeBody?: Body
+    ) {
         // 1: picker & cursor
         const { object, fraction } = this.picker.pick(new Vector2(0, 0), this.scene, camera, time);
         if (object && fraction < 1.0) {
@@ -324,49 +332,52 @@ class SceneMgmt {
         }
 
         // 3. movement
-        this.sun.rotateY(-0.005);
-        this.earth.rotateY(0.1);
-        this.clouds.rotateY(-0.01);
-        this.moon.rotateY(0.01);
-        this.earthOrbit.rotateY(0.01);
-        this.lunarOrbit.rotateY(0.02);
-        this.sunBloom.lookAt(camera.position);
-        this.sunBloom.rotateZ(time / 10_000);
-        this.sunBloom2.lookAt(camera.position);
-        this.sunBloom2.rotateZ(-time / 10_000);
+        if (playing) {
+            this.sun.rotateY(-0.005);
+            this.earth.rotateY(0.1);
+            this.clouds.rotateY(-0.01);
+            this.moon.rotateY(0.01);
+            this.earthOrbit.rotateY(0.01);
+            this.lunarOrbit.rotateY(0.02);
+            this.sunBloom.lookAt(camera.position);
+            this.sunBloom.rotateZ(time / 10_000);
+            this.sunBloom2.lookAt(camera.position);
+            this.sunBloom2.rotateZ(-time / 10_000);
 
-        // 4. update depth textures
-        if (this.depth === "cpu" && depthData["cpu"]) {
-            const { depthSensingCpuInfo, type, viewport } = depthData["cpu"];
-            if (type === "uint16") {
-                /**
-                 * Uploading depth data to GPU.
-                 * We could directly upload the raw data ...
-                 * ... but the raw data is Ui16, for which there is no common WebGL texture-format.
-                 * One could use Ui8, but then we loose every value > 255.
-                 * So the next best thing is to use f32 ... and since this requires some re-scaling anyway,
-                 * we might as well do the `rawValueToMeters` multiplication here on the CPU.
-                 * Would be more performant on the GPU, of course.
-                 */
-                // parse as uint16
-                const uint16data = new Uint16Array(depthSensingCpuInfo.data);
-                // cast to uint8
-                const float32data = new Float32Array(uint16data.length);
-                for (let i = 0; i < uint16data.length; i++) {
-                    float32data[i] = uint16data[i] * depthSensingCpuInfo.rawValueToMeters;
+            // 4. update depth textures
+            if (this.depth === "cpu" && depthData["cpu"]) {
+                const { depthSensingCpuInfo, type, viewport } = depthData["cpu"];
+                if (type === "uint16") {
+                    /**
+                     * Uploading depth data to GPU.
+                     * We could directly upload the raw data ...
+                     * ... but the raw data is Ui16, for which there is no common WebGL texture-format.
+                     * One could use Ui8, but then we loose every value > 255.
+                     * So the next best thing is to use f32 ... and since this requires some re-scaling anyway,
+                     * we might as well do the `rawValueToMeters` multiplication here on the CPU.
+                     * Would be more performant on the GPU, of course.
+                     */
+                    // parse as uint16
+                    const uint16data = new Uint16Array(depthSensingCpuInfo.data);
+                    // cast to uint8
+                    const float32data = new Float32Array(uint16data.length);
+                    for (let i = 0; i < uint16data.length; i++) {
+                        float32data[i] = uint16data[i] * depthSensingCpuInfo.rawValueToMeters;
+                    }
+                    // upload
+                    this.realWorldDepthData!.set(float32data);
+                    this.realWorldDepth!.needsUpdate = true;
+                    this.coordTrans!.x = -1 / viewport.width;
+                    this.coordTrans!.y = -1 / viewport.height;
                 }
-                // upload
-                this.realWorldDepthData!.set(float32data);
-                this.realWorldDepth!.needsUpdate = true;
-                this.coordTrans!.x = -1 / viewport.width;
-                this.coordTrans!.y = -1 / viewport.height;
-            }
-        } else if (this.depth === "gpu" && depthData["gpu"]) {
-            const mesh = depthData["gpu"];
-            if (mesh !== this.depthMesh) {
-                this.depthMesh = mesh;
-                mesh.position.set(0, 0, -2);
-                camera.add(mesh);
+            } else if (this.depth === "gpu" && depthData["gpu"]) {
+                // @TODO: I don't think I need to do anything with that mesh!
+                // const mesh = depthData["gpu"];
+                // if (mesh !== this.depthMesh) {
+                //     this.depthMesh = mesh;
+                //     mesh.position.set(0, 0, -2);
+                //     camera.add(mesh);
+                // }
             }
         }
 
@@ -453,7 +464,7 @@ class App {
     }
 
     private onAnimationLoop(time: number, frame?: XRFrame) {
-        if (!this.state.playing) return;
+        if (!this.state.session) return;
 
         if (!this.sceneMgmt) return;
         if (!frame) return;
@@ -477,6 +488,7 @@ class App {
                 frame,
                 camera,
                 depthData,
+                this.state.playing,
                 this.state.pickedBody
             );
             this.renderer.render(scene, camera);
