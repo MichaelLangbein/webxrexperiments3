@@ -131,7 +131,7 @@ import { PickHelper, SpinningCursor } from "./utils";
  *
  * Emulation:
  *  - I have an AMD-ryzen on a gigabyte-motherboard
- *  - enable hardware accelleration in bios: https://support.salad.com/article/281-enable-virtualization-by-motherboard-gigabyte
+ *  - enable hardware acceleration in bios: https://support.salad.com/article/281-enable-virtualization-by-motherboard-gigabyte
  *  - ensure that android studio uses hardware acceleration: https://developer.android.com/studio/run/emulator-acceleration
  *  - create a device: https://developers.google.com/ar/develop/c/emulator
  *      - must use x86 or x86_64 architecture and at least api 33
