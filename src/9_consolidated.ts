@@ -84,7 +84,6 @@ class SceneMgmt {
     private realWorldDepthData?: Float32Array;
     private realWorldDepth?: DataTexture;
     private coordTrans?: Vector2;
-    private depthMesh?: Mesh;
 
     constructor(private depth: "none" | "cpu" | "gpu") {
         const pickingDuration = 750;
@@ -93,7 +92,7 @@ class SceneMgmt {
         const scene = new Scene();
 
         const solarSystem = new Group();
-        solarSystem.position.set(0, 0, -2);
+        solarSystem.position.set(0, 0, -4);
         scene.add(solarSystem);
 
         const sun = new Mesh(
@@ -203,7 +202,7 @@ class SceneMgmt {
             moon: {
                 mesh: moon,
                 orbit: lunarOrbit,
-                info: getPlanetInfoMesh(moon, earthOrbit, new Vector3(0, 1, 0)),
+                info: getPlanetInfoMesh(moon, lunarOrbit, new Vector3(-0.5, 1, 0)),
             },
             earth: {
                 mesh: earth,
@@ -326,6 +325,8 @@ class SceneMgmt {
             if (name === activeBody) {
                 info.visible = true;
                 info.lookAt(camera.position);
+                // if (activeBody === "moon") {
+                // }
             } else {
                 info.visible = false;
             }

@@ -6,6 +6,8 @@ import topLevelAwait from "vite-plugin-top-level-await";
 export default {
   base: "/demos/webxr/",
   build: {
+    minify: false,
+    sourcemap: "inline",
     target: 'esnext'
   },
 }
